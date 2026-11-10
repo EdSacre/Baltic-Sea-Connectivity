@@ -1,0 +1,1987 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Baltic Connectivity Explorer</title>
+<meta name="description" content="Interactive connectivity maps (source and sink strength, settlers, dispersal distances) for fish, invertebrate and macrophyte species in the Baltic Sea.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2l12 7v14l-12 7-12-7V9z' fill='%230f766e'/%3E%3Cpath d='M16 9l6 3.5v7L16 23l-6-3.5v-7z' fill='%23a7f3d0'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="lib/maplibre-gl.css">
+<style>
+:root {
+  --bg: #f4f6f8;
+  --panel: #ffffff;
+  --panel-2: #f6f8fa;
+  --text: #17202a;
+  --muted: #5d6b79;
+  --faint: #8a96a3;
+  --border: #e1e6eb;
+  --border-strong: #cbd3db;
+  --accent: #0f766e;
+  --accent-soft: #e3f4f2;
+  --accent-text: #0b5e58;
+  --hover: #eef2f5;
+  --sel: #e3f4f2;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 6px 18px rgba(16,24,40,.10);
+  --fish: #2f6fde;
+  --invertebrates: #d9822b;
+  --macrophytes: #2e9e5b;
+  --danger: #c2410c;
+  --radius: 10px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1217; --panel: #151c23; --panel-2: #1b232c; --text: #e6edf3; --muted: #9aa8b5; --faint: #6d7b88;
+    --border: #26313c; --border-strong: #34414e; --accent: #2dd4bf; --accent-soft: #123532; --accent-text: #5eead4;
+    --hover: #1e2832; --sel: #143532; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+    --fish: #6aa0ff; --invertebrates: #f0a35a; --macrophytes: #56c98a; --danger: #fb923c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1217; --panel: #151c23; --panel-2: #1b232c; --text: #e6edf3; --muted: #9aa8b5; --faint: #6d7b88;
+  --border: #26313c; --border-strong: #34414e; --accent: #2dd4bf; --accent-soft: #123532; --accent-text: #5eead4;
+  --hover: #1e2832; --sel: #143532; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  --fish: #6aa0ff; --invertebrates: #f0a35a; --macrophytes: #56c98a; --danger: #fb923c;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased; overflow: hidden;
+}
+button { font: inherit; color: inherit; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+#app { display: flex; height: 100vh; height: 100dvh; }
+
+/* ---------- Sidebar ---------- */
+#sidebar {
+  width: 300px; flex: none; display: flex; flex-direction: column;
+  background: var(--panel); border-right: 1px solid var(--border); z-index: 5; min-height: 0;
+}
+.brand { padding: 16px 16px 10px; display: flex; align-items: flex-start; gap: 10px; }
+.brand svg { flex: none; margin-top: 2px; }
+.brand h1 { font-size: 15px; margin: 0; letter-spacing: -.01em; font-weight: 650; }
+.brand p { margin: 1px 0 0; color: var(--muted); font-size: 12px; }
+.brand .spacer { flex: 1; }
+.icon-btn {
+  width: 30px; height: 30px; border-radius: 8px; border: 1px solid transparent; background: transparent;
+  display: inline-grid; place-items: center; cursor: pointer; color: var(--muted); flex: none;
+}
+.icon-btn:hover { background: var(--hover); color: var(--text); }
+.icon-btn svg { width: 16px; height: 16px; }
+
+.search { margin: 4px 16px 10px; position: relative; }
+.search input {
+  width: 100%; height: 34px; border-radius: 8px; border: 1px solid var(--border-strong);
+  background: var(--panel-2); color: var(--text); padding: 0 30px 0 32px; font: inherit; outline: none;
+}
+.search input:focus { border-color: var(--accent); background: var(--panel); box-shadow: 0 0 0 3px var(--accent-soft); }
+.search > svg { position: absolute; left: 10px; top: 10px; width: 14px; height: 14px; color: var(--faint); pointer-events: none; }
+.search kbd { position: absolute; right: 8px; top: 8px; }
+kbd {
+  font: 11px/16px ui-monospace, SFMono-Regular, Consolas, monospace; padding: 0 5px; border-radius: 4px;
+  border: 1px solid var(--border-strong); border-bottom-width: 2px; color: var(--muted); background: var(--panel);
+}
+
+.filters { padding: 0 16px 8px; display: grid; gap: 8px; }
+.flabel { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); margin-bottom: 4px; display: flex; justify-content: space-between; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip {
+  height: 26px; padding: 0 9px; border-radius: 13px; border: 1px solid var(--border-strong); background: var(--panel);
+  cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text); white-space: nowrap;
+}
+.chip:hover { background: var(--hover); }
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text); }
+.chip .n { color: var(--faint); font-variant-numeric: tabular-nums; }
+.chip[aria-pressed="true"] .n { color: inherit; opacity: .75; }
+.chip.small { height: 22px; padding: 0 7px; font-size: 11px; border-radius: 11px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
+.g-fish { background: var(--fish); } .g-invertebrates { background: var(--invertebrates); } .g-macrophytes { background: var(--macrophytes); } .g-unknown { background: var(--faint); }
+details.more > summary { cursor: pointer; list-style: none; font-size: 12px; color: var(--muted); user-select: none; display: inline-flex; align-items: center; gap: 4px; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary svg { width: 12px; height: 12px; transition: transform .15s; }
+details.more[open] > summary svg { transform: rotate(90deg); }
+details.more .chips { margin-top: 6px; }
+.arch-group { margin-top: 6px; }
+.arch-group .flabel { margin-bottom: 3px; font-size: 10px; }
+
+.listhead { padding: 6px 16px; display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--accent-text); cursor: pointer; font-size: 12px; }
+.linkbtn:hover { text-decoration: underline; }
+#list { flex: 1; overflow-y: auto; min-height: 0; padding: 2px 8px 8px; outline: none; overscroll-behavior: contain; }
+.sp {
+  display: flex; align-items: center; gap: 9px; padding: 0 8px; height: 30px; border-radius: 7px; cursor: pointer;
+  user-select: none; white-space: nowrap;
+}
+.sp:hover { background: var(--hover); }
+.sp[aria-selected="true"] { background: var(--sel); box-shadow: inset 3px 0 0 var(--accent); }
+.sp .nm { font-style: italic; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.sp[aria-selected="true"] .nm { font-weight: 600; color: var(--accent-text); }
+.sp .ar { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.sp[hidden] { display: none; }
+.empty { padding: 24px 16px; color: var(--muted); text-align: center; }
+.sidefoot { padding: 8px 16px; border-top: 1px solid var(--border); color: var(--faint); font-size: 11.5px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+/* ---------- Main / map ---------- */
+#main { position: relative; flex: 1; min-width: 0; }
+#map { position: absolute; inset: 0; background: var(--bg); }
+.maplibregl-ctrl-group { background: var(--panel); box-shadow: var(--shadow) !important; border: 1px solid var(--border); }
+.maplibregl-ctrl-group button + button { border-top-color: var(--border); }
+:root[data-theme="dark"] .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(1); }
+.maplibregl-ctrl-scale { background: color-mix(in srgb, var(--panel) 80%, transparent); color: var(--text); border-color: var(--muted); }
+.maplibregl-ctrl-attrib { font-size: 11px; }
+.maplibregl-canvas { outline: none; }
+
+.card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
+}
+.overlay { position: absolute; z-index: 3; }
+
+/* right panel: species (name, photo, info) on top, display settings below */
+#panel { top: 12px; right: 12px; width: 344px; max-height: calc(100% - 52px); display: flex; flex-direction: column; overflow: hidden; }
+#panel header { display: flex; align-items: center; padding: 9px 8px 9px 14px; gap: 6px; border-bottom: 1px solid var(--border); flex: none; }
+#spname { font-size: 18px; font-style: italic; font-weight: 600; margin: 0; letter-spacing: -.01em; line-height: 1.2; flex: 1; min-width: 0; overflow-wrap: break-word; }
+#spname.long { font-size: 15px; }   /* species pairs such as "Coccotylus truncatus/Phyllophora pseudoceranoides" */
+#panel header .acts { display: flex; gap: 0; flex: none; }
+#panelToggle svg { transition: transform .15s; }
+#panel.collapsed #panelToggle svg { transform: rotate(180deg); }
+#panel.collapsed header { border-bottom: 0; }
+#panel.collapsed .pbody { display: none; }
+.pbody { overflow-y: auto; min-height: 0; display: grid; gap: 16px; padding: 0 0 14px; overscroll-behavior: contain; }
+.pbody > .sect, .pbody > .btnrow, .pbody > #cell { margin: 0 14px; }
+.sect .flabel { margin-bottom: 6px; }
+.spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border-strong); border-top-color: var(--accent); animation: spin .7s linear infinite; flex: none; visibility: hidden; }
+.spinner.on { visibility: visible; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* species section */
+#spinfo { border-bottom: 1px solid var(--border); }
+#spinfo .ph { position: relative; height: 196px; background: var(--panel-2); border-bottom: 1px solid var(--border); display: grid; place-items: center; }
+#spinfo .ph img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; opacity: 0; transition: opacity .18s; }
+#spinfo .ph img.on { opacity: 1; }
+#spinfo .ph .none { color: var(--faint); font-size: 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+#spinfo .ph .none svg { width: 28px; height: 28px; opacity: .7; }
+#spinfo .nm { padding: 10px 14px 12px; }
+#spcom { font-size: 15px; font-weight: 600; line-height: 1.3; }
+#spcom.missing { color: var(--faint); font-size: 12.5px; font-weight: 400; }
+#spsv { color: var(--muted); font-size: 12px; margin-top: 1px; }
+#sptags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+.tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; padding: 1px 8px; height: 21px; border-radius: 11px; background: var(--panel-2); border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+.tag b { color: var(--text); font-weight: 600; }
+#spdesc { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+#spdesc[hidden], #spsv[hidden] { display: none; }
+#spcr { color: var(--faint); font-size: 10.5px; margin-top: 8px; line-height: 1.35; overflow-wrap: anywhere; }
+#spcr:empty { display: none; }
+#spcr a { color: inherit; }
+@media (max-height: 760px) and (min-width: 861px) { #spinfo .ph { height: 150px; } }
+
+/* legend */
+#legend .lt { display: flex; align-items: baseline; gap: 6px; margin-bottom: 2px; }
+#legend .lt b { font-size: 12.5px; }
+#legend .lt span { color: var(--muted); font-size: 11.5px; }
+#legend canvas { display: block; width: 100%; height: 34px; margin-top: 4px; }
+
+/* selected cell */
+#cell { padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
+#cell[hidden] { display: none; }
+#cell .ch { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+#cell .ch b { font-size: 12.5px; }
+#cell .ch span { color: var(--muted); font-size: 11.5px; }
+#cell .ch .icon-btn { margin-left: auto; width: 24px; height: 24px; }
+#cell table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 12px; }
+#cell th { text-align: right; font-weight: 600; color: var(--faint); font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; padding: 0 0 3px; }
+#cell th:first-child { text-align: left; }
+#cell td { padding: 2px 0; text-align: right; border-top: 1px solid var(--border); }
+#cell td:first-child { text-align: left; color: var(--muted); padding-right: 8px; }
+#cell td.cur { font-weight: 700; color: var(--accent-text); }
+#cell .pct { margin-top: 6px; color: var(--muted); font-size: 11.5px; }
+
+.vargrid { display: grid; grid-template-columns: 1fr 64px 64px; gap: 3px 4px; align-items: center; }
+.vargrid .vh { font-size: 10.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; text-align: center; font-weight: 600; }
+.vargrid .vl { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vbtn {
+  height: 26px; border-radius: 6px; border: 1px solid var(--border-strong); background: var(--panel); cursor: pointer; font-size: 11.5px; color: var(--muted);
+}
+.vbtn:hover { background: var(--hover); color: var(--text); }
+.vbtn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+:root[data-theme="dark"] .vbtn[aria-pressed="true"] { color: #062b28; }
+.vbtn.wide { grid-column: span 2; }
+#vardesc { color: var(--muted); font-size: 12px; margin-top: 8px; }
+#vardesc code { font-size: 11px; background: var(--panel-2); border: 1px solid var(--border); padding: 0 4px; border-radius: 4px; color: var(--text); }
+
+.seg { display: flex; border: 1px solid var(--border-strong); border-radius: 7px; overflow: hidden; background: var(--panel); }
+.seg button { flex: 1; height: 28px; border: 0; background: transparent; cursor: pointer; font-size: 12px; color: var(--muted); border-left: 1px solid var(--border); padding: 0 4px; white-space: nowrap; }
+.seg button:first-child { border-left: 0; }
+.seg button:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+.seg button:disabled { opacity: .45; cursor: default; }
+.seg + .seg { margin-top: 6px; }
+
+.cm-row { display: flex; gap: 6px; }
+.cm-btn {
+  flex: 1; height: 32px; border-radius: 7px; border: 1px solid var(--border-strong); background: var(--panel); cursor: pointer;
+  display: flex; align-items: center; gap: 8px; padding: 0 8px;
+}
+.cm-btn:hover { background: var(--hover); }
+.cm-btn .sw { flex: 1; height: 14px; border-radius: 3px; }
+.cm-btn .cn { font-size: 12px; width: 62px; text-align: left; }
+.cm-pop { margin-top: 6px; border: 1px solid var(--border); border-radius: 8px; padding: 6px; background: var(--panel-2); display: grid; gap: 2px; max-height: 300px; overflow-y: auto; }
+.cm-pop[hidden] { display: none; }
+.cm-pop .cg { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); font-weight: 600; padding: 4px 4px 2px; }
+.cm-opt { display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 6px; border: 0; background: transparent; border-radius: 5px; cursor: pointer; }
+.cm-opt:hover, .cm-opt:focus-visible { background: var(--hover); }
+.cm-opt[aria-selected="true"] { background: var(--accent-soft); }
+.cm-opt .sw { flex: 1; height: 12px; border-radius: 3px; }
+.cm-opt span:last-child { width: 62px; font-size: 12px; text-align: left; }
+
+.btnrow { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.08); background: var(--accent); }
+:root[data-theme="dark"] .btn.primary { color: #062b28; }
+.btn:disabled { opacity: .6; cursor: progress; }
+.hint { color: var(--faint); font-size: 11.5px; margin-top: 5px; }
+.btn { height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--border-strong); background: var(--panel); cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { background: var(--hover); }
+.btn svg { width: 14px; height: 14px; }
+
+/* tooltip */
+#tip {
+  position: absolute; left: 0; top: 0; z-index: 4; pointer-events: none; padding: 6px 9px; border-radius: 7px;
+  background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow); white-space: nowrap; will-change: transform;
+  font-variant-numeric: tabular-nums;
+}
+#tip[hidden] { display: none; }
+#tip .v { font-size: 14px; font-weight: 700; }
+#tip .s { color: var(--muted); font-size: 11.5px; }
+
+/* loading bar */
+#loadbar { position: absolute; left: 0; right: 0; top: 0; height: 2px; z-index: 6; overflow: hidden; opacity: 0; transition: opacity .2s; pointer-events: none; }
+#loadbar.on { opacity: 1; }
+#loadbar::after { content: ""; position: absolute; top: 0; bottom: 0; width: 30%; background: var(--accent); animation: slide 1s ease-in-out infinite; }
+@keyframes slide { from { left: -30%; } to { left: 100%; } }
+
+#toast { position: absolute; left: 50%; bottom: 36px; transform: translateX(-50%); z-index: 7; padding: 8px 14px; max-width: min(520px, calc(100% - 32px)); font-size: 12.5px; }
+#toast[hidden] { display: none; }
+
+#boot { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; background: var(--bg); transition: opacity .25s; }
+#boot.done { opacity: 0; pointer-events: none; }
+#boot .bx { text-align: center; color: var(--muted); }
+#boot .spinner { visibility: visible; width: 22px; height: 22px; margin: 0 auto 10px; }
+#boot.err .spinner { display: none; }
+#boot.err .bx { max-width: 520px; color: var(--text); padding: 20px; }
+#boot code { background: var(--panel-2); border: 1px solid var(--border); padding: 1px 5px; border-radius: 4px; }
+
+/* help dialog */
+#help { border: 1px solid var(--border); border-radius: 12px; background: var(--panel); color: var(--text); padding: 18px 20px; box-shadow: var(--shadow); max-width: 420px; }
+#help::backdrop { background: rgba(10,15,20,.35); }
+#help h3 { margin: 0 0 10px; font-size: 14px; }
+#help table { border-collapse: collapse; width: 100%; }
+#help td { padding: 4px 0; vertical-align: top; }
+#help td:first-child { white-space: nowrap; padding-right: 14px; }
+#help p { color: var(--muted); font-size: 12px; margin: 12px 0 0; }
+
+.mobile-only { display: none !important; }
+
+@media (max-width: 860px) {
+  #sidebar { position: absolute; inset: 0 auto 0 0; width: min(320px, 88vw); transform: translateX(-102%); transition: transform .2s ease; box-shadow: var(--shadow); z-index: 10; }
+  #app.side-open #sidebar { transform: none; }
+  .mobile-only { display: inline-grid !important; }
+  #panel { top: auto; bottom: 34px; right: 12px; left: 12px; width: auto; max-height: 62%; }
+  #spname { font-size: 16px; }
+  #spinfo .ph { height: 150px; }
+  .maplibregl-ctrl-bottom-left { bottom: 96px; }
+  #panelToggle svg { transform: rotate(180deg); }               /* bottom sheet: arrow points up to expand */
+  #panel.collapsed #panelToggle svg { transform: none; }
+}
+</style>
+<script>
+/* Data registry: the data/*.js files call these functions when they load. */
+window.CMAP = {
+  manifest: null, grid: null, land: null, pending: Object.create(null), onLand: null,
+  ingestManifest: function (m) { this.manifest = m; },
+  ingestGrid: function (meta, b64) { this.grid = { meta: meta, b64: b64 }; },
+  details: {},
+  ingestDetails: function (d) { this.details = d; },
+  ingestLand: function (g) { this.land = g; if (this.onLand) this.onLand(g); },
+  ingest: function (id, meta, b64) { var p = this.pending[id]; if (p) { delete this.pending[id]; p(meta, b64); } }
+};
+</script>
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar" aria-label="Species">
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2l12 7v14l-12 7-12-7V9z" fill="var(--accent)"/><path d="M16 9l6 3.5v7L16 23l-6-3.5v-7z" fill="var(--panel)" opacity=".85"/></svg>
+      <div>
+        <h1>Baltic Connectivity Explorer</h1>
+        <p id="subtitle">Species connectivity on a 3 km hex grid</p>
+      </div>
+      <span class="spacer"></span>
+      <button class="icon-btn" id="themeBtn" title="Toggle light / dark theme" aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+      <button class="icon-btn mobile-only" id="sideClose" aria-label="Close species list">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="search" type="search" placeholder="Search species" autocomplete="off" spellcheck="false" aria-label="Search species" aria-controls="list">
+      <kbd>/</kbd>
+    </div>
+    <div class="filters">
+      <div>
+        <div class="flabel">Group</div>
+        <div class="chips" id="groupChips"></div>
+      </div>
+      <div>
+        <div class="flabel">Mobility</div>
+        <div class="seg" id="mobSeg"></div>
+      </div>
+      <details class="more" id="archDetails">
+        <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 6l6 6-6 6"/></svg>Archetype filter <span id="archCount"></span></summary>
+        <div id="archChips"></div>
+      </details>
+    </div>
+    <div class="listhead"><span id="count"></span><button class="linkbtn" id="clearFilters" hidden>Clear filters</button></div>
+    <div id="list" role="listbox" tabindex="0" aria-label="Species list"></div>
+    <div class="sidefoot"><kbd>↑</kbd><kbd>↓</kbd> browse species <span style="flex:1"></span><button class="linkbtn" id="helpBtn">Shortcuts</button></div>
+  </aside>
+
+  <main id="main">
+    <div id="map" aria-label="Connectivity map"></div>
+    <div id="loadbar"></div>
+
+    <section id="panel" class="card overlay" aria-label="Species and map settings">
+      <header id="panelHead">
+        <button class="icon-btn mobile-only" id="sideOpen" aria-label="Open species list">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <h2 id="spname" aria-live="polite">–</h2>
+        <div class="spinner" id="spin"></div>
+        <div class="acts">
+          <button class="icon-btn" id="prevBtn" title="Previous species (↑)" aria-label="Previous species"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 15l6-6 6 6"/></svg></button>
+          <button class="icon-btn" id="nextBtn" title="Next species (↓)" aria-label="Next species"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+          <button class="icon-btn" id="fitBtn" title="Zoom to species range" aria-label="Zoom to species range"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+          <button class="icon-btn" id="panelToggle" title="Collapse panel" aria-label="Collapse panel" aria-expanded="true" aria-controls="pbody"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 15l6-6 6 6"/></svg></button>
+        </div>
+      </header>
+      <div class="pbody" id="pbody">
+        <div id="spinfo">
+          <div class="ph" id="spph"><img id="spimg" alt="" decoding="async"></div>
+          <div class="nm">
+            <div id="spcom"></div>
+            <div id="spsv" hidden></div>
+            <div id="sptags"></div>
+            <p id="spdesc" hidden></p>
+            <div id="spcr"></div>
+          </div>
+        </div>
+        <div class="sect" id="legend" aria-label="Legend">
+          <div class="lt"><b id="legTitle">–</b><span id="legUnit"></span></div>
+          <canvas id="legCanvas" width="316" height="34"></canvas>
+        </div>
+        <section id="cell" hidden aria-live="polite"></section>
+        <div class="sect">
+          <div class="flabel">Variable</div>
+          <div class="vargrid" id="vargrid"></div>
+          <div id="vardesc"></div>
+        </div>
+        <div class="sect">
+          <div class="flabel">Colour scheme</div>
+          <div class="cm-row">
+            <button class="cm-btn" id="cmBtn" aria-haspopup="listbox" aria-expanded="false"><span class="sw" id="cmSw"></span><span class="cn" id="cmName"></span></button>
+            <button class="icon-btn" id="revBtn" title="Reverse colour scheme (R)" aria-label="Reverse colour scheme" aria-pressed="false" style="border-color:var(--border-strong);width:32px;height:32px">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h13l-4-4M17 17H4l4 4"/></svg>
+            </button>
+          </div>
+          <div class="cm-pop" id="cmPop" role="listbox" hidden></div>
+        </div>
+        <div class="sect">
+          <div class="flabel">Map</div>
+          <div class="seg" id="baseSeg"></div>
+        </div>
+        <div class="sect">
+          <div class="flabel">Export image</div>
+          <div class="seg" id="expAreaSeg"></div>
+          <div class="seg" id="expFmtSeg"></div>
+          <div class="seg" id="expSizeSeg"></div>
+          <button class="btn primary" id="exportBtn" style="margin-top:8px;width:100%;justify-content:center"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span id="exportLabel">Save map image</span></button>
+          <div class="hint" id="expHint"></div>
+        </div>
+        <div class="btnrow">
+          <button class="btn" id="copyBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>Copy link</button>
+          <button class="btn" id="resetBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg>Reset view</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="tip" hidden></div>
+    <div id="toast" class="card" hidden role="status"></div>
+  </main>
+</div>
+
+<div id="boot"><div class="bx"><div class="spinner"></div><div id="bootMsg">Loading connectivity data…</div></div></div>
+
+<dialog id="help">
+  <h3>Keyboard shortcuts</h3>
+  <table>
+    <tr><td><kbd>↑</kbd> <kbd>↓</kbd> or <kbd>←</kbd> <kbd>→</kbd></td><td>Previous / next species</td></tr>
+    <tr><td><kbd>PgUp</kbd> <kbd>PgDn</kbd></td><td>Jump 10 species</td></tr>
+    <tr><td><kbd>Home</kbd> <kbd>End</kbd></td><td>First / last species</td></tr>
+    <tr><td><kbd>/</kbd></td><td>Search species</td></tr>
+    <tr><td><kbd>S</kbd></td><td>Switch between source and sink</td></tr>
+    <tr><td><kbd>1</kbd> – <kbd>6</kbd></td><td>Choose variable row</td></tr>
+    <tr><td><kbd>R</kbd></td><td>Reverse colour scheme</td></tr>    <tr><td><kbd>Esc</kbd></td><td>Clear selected cell / leave search</td></tr>
+  </table>
+  <p>Hover a cell for its value; click a cell to see all variables for it. Filters (group, mobility, archetype, search) restrict which species the arrow keys step through.</p>
+  <form method="dialog" style="margin-top:14px;text-align:right"><button class="btn">Close</button></form>
+</dialog>
+
+<script src="lib/maplibre-gl.js"></script>
+<script src="data/manifest.js"></script>
+<script src="data/grid.js"></script>
+<script src="data/details.js"></script>
+<script>
+(function () {
+'use strict';
+
+/* =====================================================================
+   Configuration
+   ===================================================================== */
+
+// Human-readable descriptions of the GeoPackage columns. Columns that are
+// not listed here still work; they get a label derived from their name.
+const COLUMN_INFO = {
+  source_strength:       { label: 'Source strength', desc: 'Total strength of the connections leaving this cell – its importance as a source of propagules.' },
+  source_strength_tukey: { label: 'Source strength (Tukey)', desc: 'Source strength with extreme outliers capped at a Tukey fence, which gives better contrast where a few cells dominate.' },
+  sink_strength:         { label: 'Sink strength', desc: 'Total strength of the connections arriving in this cell – its importance as a sink (receiving area).' },
+  sink_strength_tukey:   { label: 'Sink strength (Tukey)', desc: 'Sink strength with extreme outliers capped at a Tukey fence, which gives better contrast where a few cells dominate.' },
+  source_settlers:       { label: 'Settlers exported', desc: 'Settlers originating from this cell, i.e. propagules released here that settle successfully.' },
+  sink_settlers:         { label: 'Settlers received', desc: 'Settlers arriving in this cell from all origin cells.' },
+  source_n_dest:         { label: 'Destination cells', desc: 'Number of distinct cells reached by settlers released in this cell.' },
+  sink_n_origin:         { label: 'Origin cells', desc: 'Number of distinct cells supplying settlers to this cell.' },
+  source_mean_dist:      { label: 'Mean dispersal distance (source)', unit: 'km', desc: 'Mean distance from this cell to where its settlers end up, weighted by the number of settlers.' },
+  sink_mean_dist:        { label: 'Mean dispersal distance (sink)', unit: 'km', desc: 'Mean distance travelled by the settlers arriving in this cell, weighted by the number of settlers.' },
+  source_dist_plain:     { label: 'Mean distance, unweighted (source)', unit: 'km', desc: 'Unweighted mean distance from this cell to the cells it connects to.' },
+  sink_dist_plain:       { label: 'Mean distance, unweighted (sink)', unit: 'km', desc: 'Unweighted mean distance from this cell to the cells that supply it.' }
+};
+// Rows of the variable grid: each row pairs a source column with a sink column.
+const METRIC_ROWS = [
+  { label: 'Strength (Tukey)',   source: 'source_strength_tukey', sink: 'sink_strength_tukey' },
+  { label: 'Strength',           source: 'source_strength',       sink: 'sink_strength' },
+  { label: 'Settlers',           source: 'source_settlers',       sink: 'sink_settlers' },
+  { label: 'Connected cells',    source: 'source_n_dest',         sink: 'sink_n_origin' },
+  { label: 'Mean distance',      source: 'source_mean_dist',      sink: 'sink_mean_dist' },
+  { label: 'Unweighted distance',source: 'source_dist_plain',     sink: 'sink_dist_plain' }
+];
+
+// Colour schemes: concatenated 6-digit hex stops (viridisLite / ColorBrewer).
+const COLORMAPS = [
+  { group: 'Perceptually uniform', items: {
+    viridis: '44015448186a472d7b4240863b528b33638d2c728e26828e21908c1f9f8827ad813ebc745dc86382d34daadc32d5e21afde725',
+    magma:   '0000040a08221d114736106b51127c691c818226819c2e7fb63679cf406fe65164f46a5cfb8861fea571fec287fde0a1fcfdbf',
+    inferno: '0000040b0724210c4a3d096556106e71196e89226aa32c61bb3754d14545e35932f1721ef98c0afcaa0ff9c932f2e865fcffa4',
+    plasma:  '0d08873105974c02a16600a77e03a89511a1a92395bc3488cc4678da596ae56b5df07f4ff89441fdab33fdc328f9dd25f0f921',
+    cividis: '00204d002c6905366e2d426c414d6b52596c61646f6f70737c7b788b87799b9477aca174bcaf6fcebc68e0cb5ef2da50ffea46',
+    mako:    '0b04051c101c2b1c3537284f3e356b4143863b569836699f357ba2348ca7359eaa3bb0ad49c1ad68d1ad96ddb5bee8cadef5e5',
+    rocket:  '03051a180f2930173a481c48611f537b1f59961c5bb11758cb1b4fde2e44ec4b3ef26a48f4875ef6a178f6bb97f8d3bafaebdd',
+    turbo:   '30123b4040a2466be34293ff28bbec18dcc331f2996bfe64a2fc3ccced34edd03afdad35fb8022ec520fd23105ac17017a0403'
+  }},
+  { group: 'Sequential', items: {
+    YlGnBu:  'ffffd9edf8b1c7e9b47fcdbb41b6c41d91c0225ea8253494081d58',
+    YlOrRd:  'ffffccffeda0fed976feb24cfd8d3cfc4e2ae31a1cbd0026800026',
+    Blues:   'f7fbffdeebf7c6dbef9ecae16baed64292c62171b508519c08306b',
+    Greens:  'f7fcf5e5f5e0c7e9c0a1d99b74c47641ab5d238b45006d2c00441b',
+    Purples: 'fcfbfdefedf5dadaebbcbddc9e9ac8807dba6a51a354278f3f007d',
+    Oranges: 'fff5ebfee6cefdd0a2fdae6bfd8d3cf16913d94801a636037f2704',
+    PuBuGn:  'fff7fbece2f0d0d1e6a6bddb67a9cf3690c002818a016c59014636',
+    RdPu:    'fff7f3fde0ddfcc5c0fa9fb5f768a1dd3497ae017e7a017749006a'
+  }},
+  { group: 'Diverging', items: {
+    RdYlBu:   '3136954575b474add1abd9e9e0f3f8ffffbffee090fdae61f46d43d73027a50026',
+    Spectral: '5e4fa23288bd66c2a5abdda4e6f598ffffbffee08bfdae61f46d43d53e4f9e0142',
+    RdBu:     '0530612166ac4393c392c5ded1e5f0f7f7f7fddbc7f4a582d6604db2182b67001f',
+    PuOr:     '2d004b5427888073acb2abd2d8daebf7f7f7fee0b6fdb863e08214b358067f3b08',
+    BrBG:     '003c3001665e35978f80cdc1c7eae5f5f5f5f6e8c3dfc27dbf812d8c510a543005'
+  }}
+];
+
+const BASEMAPS = {
+  light:     { label: 'Light',     dark: false, online: true, style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json' },
+  dark:      { label: 'Dark',      dark: true,  online: true, style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json' },
+  satellite: { label: 'Satellite', dark: true,  online: true, style: () => ({
+    version: 8,
+    sources: {
+      sat: { type: 'raster', tileSize: 256, maxzoom: 18,
+        tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+        attribution: 'Imagery © <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a>, Maxar, Earthstar Geographics' },
+      // place names and borders (CARTO's raster label tiles now require an API key)
+      labels: { type: 'raster', tileSize: 256, maxzoom: 18,
+        tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'],
+        attribution: 'Labels © <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a>' }
+    },
+    layers: [
+      { id: 'bg', type: 'background', paint: { 'background-color': '#0b1620' } },
+      { id: 'sat', type: 'raster', source: 'sat' },
+      { id: 'labels', type: 'raster', source: 'labels' }
+    ]
+  }), before: 'labels' },
+  // not offered as a choice: only used automatically when the online basemaps can't be reached
+  offline:   { label: 'Offline', dark: null, online: false, hidden: true, style: () => offlineStyle() }
+};
+
+/* =====================================================================
+   Small utilities
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const nf4 = new Intl.NumberFormat('en', { maximumSignificantDigits: 4 });
+const nfInt = new Intl.NumberFormat('en', { maximumFractionDigits: 0 });
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function fmt(v, integer) {
+  if (v == null || !isFinite(v)) return '–';
+  if (integer || Math.abs(v) >= 1e4) return nfInt.format(v);
+  if (v === 0) return '0';
+  return nf4.format(v);
+}
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function b64ToBytes(s) {
+  if (typeof Uint8Array.fromBase64 === 'function') return Uint8Array.fromBase64(s);
+  const bin = atob(s), n = bin.length, out = new Uint8Array(n);
+  for (let i = 0; i < n; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function prettify(id) { const s = id.replace(/_/g, ' '); return s.charAt(0).toUpperCase() + s.slice(1); }
+function seasonText(s) {
+  if (!s) return null;
+  const m = String(s).split(',').map(x => parseInt(x, 10)).filter(x => x >= 1 && x <= 12);
+  if (!m.length) return null;
+  if (m.length === 12) return 'year-round';
+  let contiguous = true;
+  for (let i = 1; i < m.length; i++) if (m[i] !== (m[i - 1] % 12) + 1) contiguous = false;
+  return contiguous ? `${MONTHS[m[0] - 1]}–${MONTHS[m[m.length - 1] - 1]}` : m.map(x => MONTHS[x - 1]).join(', ');
+}
+let toastTimer = 0;
+function toast(msg, ms = 4500) {
+  const t = $('toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, ms);
+}
+function fatal(html) {
+  const b = $('boot'); b.classList.add('err'); b.classList.remove('done');
+  $('bootMsg').innerHTML = html;
+}
+
+/* =====================================================================
+   Startup checks
+   ===================================================================== */
+const M = window.CMAP.manifest, G0 = window.CMAP.grid;
+if (!M || !G0) {
+  fatal('<b>The data files could not be loaded.</b><br><br>Make sure the <code>data</code> folder sits next to <code>index.html</code> (run <code>Rscript tools/build_data.R</code> to create it).');
+  return;
+}
+if (!window.maplibregl) {
+  fatal('<b>The map library could not be loaded.</b><br><br>Make sure <code>lib/maplibre-gl.js</code> sits next to <code>index.html</code>.');
+  return;
+}
+
+/* =====================================================================
+   Projection: EPSG:3035 (ETRS89 / LAEA Europe) inverse -> Web Mercator
+   ===================================================================== */
+const laeaToLonLat = (() => {
+  const a = 6378137, f = 1 / 298.257222101, e2 = f * (2 - f), e = Math.sqrt(e2);
+  const lat0 = 52 * Math.PI / 180, lon0 = 10 * Math.PI / 180, FE = 4321000, FN = 3210000;
+  const q = phi => { const s = Math.sin(phi); return (1 - e2) * (s / (1 - e2 * s * s) - (1 / (2 * e)) * Math.log((1 - e * s) / (1 + e * s))); };
+  const qP = q(Math.PI / 2), beta0 = Math.asin(q(lat0) / qP), Rq = a * Math.sqrt(qP / 2);
+  const D = a * (Math.cos(lat0) / Math.sqrt(1 - e2 * Math.sin(lat0) ** 2)) / (Rq * Math.cos(beta0));
+  const sb0 = Math.sin(beta0), cb0 = Math.cos(beta0), e4 = e2 * e2, e6 = e4 * e2;
+  const c1 = e2 / 3 + 31 * e4 / 180 + 517 * e6 / 5040, c2 = 23 * e4 / 360 + 251 * e6 / 3780, c3 = 761 * e6 / 45360;
+  const R2D = 180 / Math.PI;
+  return function (X, Y, out) {
+    const dx = X - FE, dy = Y - FN;
+    const rho = Math.sqrt((dx / D) ** 2 + (D * dy) ** 2);
+    if (rho < 1e-9) { out[0] = 10; out[1] = 52; return out; }
+    const C = 2 * Math.asin(rho / (2 * Rq)), sC = Math.sin(C), cC = Math.cos(C);
+    const bp = Math.asin(cC * sb0 + (D * dy * sC * cb0) / rho);
+    out[0] = (lon0 + Math.atan2(dx * sC, D * rho * cb0 * cC - D * D * dy * sb0 * sC)) * R2D;
+    out[1] = (bp + c1 * Math.sin(2 * bp) + c2 * Math.sin(4 * bp) + c3 * Math.sin(6 * bp)) * R2D;
+    return out;
+  };
+})();
+const lonToMx = lon => (lon + 180) / 360;
+const latToMy = lat => (180 - (180 / Math.PI) * Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360))) / 360;
+
+/* =====================================================================
+   Hex grid geometry (built once, shared by all species)
+   ===================================================================== */
+const GRID = (function buildGrid(meta, b64) {
+  const bytes = b64ToBytes(b64), N = meta.n;
+  const gi = new Uint16Array(bytes.buffer, bytes.byteOffset, N);
+  const gj = new Uint16Array(bytes.buffer, bytes.byteOffset + N * 2, N);
+  const hexId = new Int32Array(bytes.buffer.slice(bytes.byteOffset + N * 4, bytes.byteOffset + N * 8));
+  const DX = meta.dx, HR = meta.r / 2;
+  const OFF_M = [0, 0, -1, -1, 0, 1, 1], OFF_K = [0, -2, -1, 1, 2, 1, -1]; // centre + 6 corners
+
+  const [w, s, e, n] = meta.bbox;
+  const ox = lonToMx((w + e) / 2), oy = latToMy((s + n) / 2);   // render origin (precision)
+  // interleaved vertex buffer: x, y (relative mercator), edge (0 centre / 1 corner), hex index
+  const vert = new Float32Array(N * 7 * 4);
+  const centre = new Float32Array(N * 2);    // lon/lat of hex centres
+  const ll = [0, 0];
+  for (let h = 0; h < N; h++) {
+    const i = gi[h], j = gj[h];
+    for (let v = 0; v < 7; v++) {
+      // integer lattice arithmetic => shared corners are bit-identical (no cracks)
+      laeaToLonLat(meta.x0 + (i + OFF_M[v]) * DX, meta.y0 + (3 * j + OFF_K[v]) * HR, ll);
+      const p = (h * 7 + v) * 4;
+      vert[p] = lonToMx(ll[0]) - ox;
+      vert[p + 1] = latToMy(ll[1]) - oy;
+      vert[p + 2] = v === 0 ? 0 : 1;
+      vert[p + 3] = h;
+      if (v === 0) { centre[h * 2] = ll[0]; centre[h * 2 + 1] = ll[1]; }
+    }
+  }
+  const index = new Uint32Array(N * 18);
+  for (let h = 0, q = 0; h < N; h++) {
+    const b = h * 7;
+    for (let k = 0; k < 6; k++) { index[q++] = b; index[q++] = b + 1 + k; index[q++] = b + 1 + (k + 1) % 6; }
+  }
+
+  // uniform-grid spatial index over hex bounding boxes (for hover / click picking)
+  let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity, cs = 0;
+  const bb = new Float32Array(N * 4);
+  for (let h = 0; h < N; h++) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (let v = 1; v < 7; v++) {
+      const p = (h * 7 + v) * 4, x = vert[p], y = vert[p + 1];
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+    bb[h * 4] = x0; bb[h * 4 + 1] = y0; bb[h * 4 + 2] = x1; bb[h * 4 + 3] = y1;
+    if (x0 < minx) minx = x0; if (y0 < miny) miny = y0; if (x1 > maxx) maxx = x1; if (y1 > maxy) maxy = y1;
+    cs = Math.max(cs, x1 - x0, y1 - y0);
+  }
+  const cols = Math.ceil((maxx - minx) / cs) + 1, rows = Math.ceil((maxy - miny) / cs) + 1;
+  const counts = new Uint32Array(cols * rows + 1);
+  const cellRange = (h, fn) => {
+    const c0 = Math.floor((bb[h * 4] - minx) / cs), c1 = Math.floor((bb[h * 4 + 2] - minx) / cs);
+    const r0 = Math.floor((bb[h * 4 + 1] - miny) / cs), r1 = Math.floor((bb[h * 4 + 3] - miny) / cs);
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) fn(r * cols + c);
+  };
+  for (let h = 0; h < N; h++) cellRange(h, k => { counts[k + 1]++; });
+  for (let k = 1; k < counts.length; k++) counts[k] += counts[k - 1];
+  const fill = counts.slice(0, -1), items = new Uint32Array(counts[counts.length - 1]);
+  for (let h = 0; h < N; h++) cellRange(h, k => { items[fill[k]++] = h; });
+
+  function inside(h, x, y) {
+    let sign = 0;
+    for (let k = 0; k < 6; k++) {
+      const p = (h * 7 + 1 + k) * 4, q = (h * 7 + 1 + (k + 1) % 6) * 4;
+      const cr = (vert[q] - vert[p]) * (y - vert[p + 1]) - (vert[q + 1] - vert[p + 1]) * (x - vert[p]);
+      if (cr !== 0) { const sg = cr > 0 ? 1 : -1; if (sign === 0) sign = sg; else if (sg !== sign) return false; }
+    }
+    return true;
+  }
+  function pick(lng, lat) {
+    const x = lonToMx(lng) - ox, y = latToMy(lat) - oy;
+    const c = Math.floor((x - minx) / cs), r = Math.floor((y - miny) / cs);
+    if (c < 0 || r < 0 || c >= cols || r >= rows) return -1;
+    const k = r * cols + c;
+    for (let p = counts[k]; p < counts[k + 1]; p++) if (inside(items[p], x, y)) return items[p];
+    return -1;
+  }
+
+  // self-check of the projection against reference points computed by sf/PROJ
+  if (meta.check) {
+    let maxErr = 0;
+    for (let k = 0; k < meta.check.laea.length; k++) {
+      laeaToLonLat(meta.check.laea[k][0], meta.check.laea[k][1], ll);
+      maxErr = Math.max(maxErr, Math.abs(ll[0] - meta.check.lonlat[k][0]), Math.abs(ll[1] - meta.check.lonlat[k][1]));
+    }
+    if (maxErr > 1e-7) console.warn('LAEA projection check: max error', maxErr, 'degrees');
+  }
+  return { N, hexId, vert, index, centre, ox, oy, bbox: meta.bbox, pick };
+})(G0.meta, G0.b64);
+window.CMAP.grid = null; // free the base64 string
+
+/* =====================================================================
+   Colour maps
+   ===================================================================== */
+const CMAP_STOPS = {}, CMAP_GROUP = {};
+for (const g of COLORMAPS) for (const [name, hex] of Object.entries(g.items)) {
+  const stops = [];
+  for (let i = 0; i < hex.length; i += 6) stops.push([parseInt(hex.substr(i, 2), 16), parseInt(hex.substr(i + 2, 2), 16), parseInt(hex.substr(i + 4, 2), 16)]);
+  CMAP_STOPS[name] = stops; CMAP_GROUP[name] = g.group;
+}
+function makeLut(name, reverse) {
+  const st = CMAP_STOPS[name].slice(); if (reverse) st.reverse();
+  const out = new Uint8Array(256 * 4), m = st.length - 1;
+  for (let i = 0; i < 256; i++) {
+    const x = i / 255 * m, k = Math.min(Math.floor(x), m - 1), f = x - k;
+    for (let c = 0; c < 3; c++) out[i * 4 + c] = Math.round(st[k][c] + (st[k + 1][c] - st[k][c]) * f);
+    out[i * 4 + 3] = 255;
+  }
+  return out;
+}
+function gradientCss(name, reverse) {
+  const st = CMAP_STOPS[name].slice(); if (reverse) st.reverse();
+  return `linear-gradient(90deg, ${st.map((c, i) => `rgb(${c}) ${(i / (st.length - 1) * 100).toFixed(1)}%`).join(', ')})`;
+}
+
+/* =====================================================================
+   Columns & species metadata
+   ===================================================================== */
+const COLS = M.columns.map((c, k) => {
+  const info = COLUMN_INFO[c.id] || {};
+  return Object.assign({}, c, { k, label: info.label || prettify(c.id), desc: info.desc || '', unit: info.unit || '' });
+});
+const COL_BY_ID = Object.fromEntries(COLS.map(c => [c.id, c]));
+
+const SPECIES = M.species.slice().sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
+const SP_BY_ID = Object.fromEntries(SPECIES.map(s => [s.id, s]));
+const GROUP_LABEL = { fish: 'Fish', invertebrates: 'Invertebrates', macrophytes: 'Macrophytes' };
+const GROUP_SINGULAR = { fish: 'Fish', invertebrates: 'Invertebrate', macrophytes: 'Macrophyte' };
+const groupLabel = g => GROUP_LABEL[g] || prettify(g);
+const mobilityLabel = m => m === 'mobile' ? 'Mobile' : m === 'non-mobile' ? 'Non-mobile' : prettify(m);
+
+/* =====================================================================
+   Species data loading (JSONP-style <script> injection: works on file://)
+   ===================================================================== */
+const CACHE_MAX = 48;
+const cache = new Map();       // id -> decoded species (Map keeps LRU order)
+const inflight = new Map();    // id -> Promise
+const NBYTES_MASK = Math.ceil(GRID.N / 8);
+const httpVersion = /^https?:$/.test(location.protocol) ? `?v=${encodeURIComponent(M.built)}` : '';
+
+function decodeSpecies(id, meta, b64) {
+  const bytes = b64ToBytes(b64), n = meta.n;
+  const gidx = new Uint32Array(n);
+  let c = 0;
+  for (let b = 0; b < NBYTES_MASK; b++) {
+    let v = bytes[b];
+    while (v) { const low = v & -v; gidx[c++] = b * 8 + (31 - Math.clz32(low)); v ^= low; }
+  }
+  if (c !== n) throw new Error(`Corrupt data for ${id} (${c} != ${n})`);
+  const raw = meta.q.map((_, k) => new Uint16Array(bytes.buffer, bytes.byteOffset + NBYTES_MASK + k * n * 2, n));
+  const vals = [], stats = [];
+  let pos = null, lonlatBox = null;
+  const sp = {
+    id, n, gidx,
+    // decoded values of column k (Float64Array, cached)
+    values(k) {
+      if (vals[k]) return vals[k];
+      const [mode, mn, mx] = meta.q[k], q = raw[k], out = new Float64Array(n);
+      const lmn = Math.log(mn || 1), dl = Math.log(mx || 1) - lmn;
+      for (let i = 0; i < n; i++) {
+        const x = q[i];
+        out[i] = x === 65535 ? NaN
+          : mode === 0 ? x
+          : mode === 1 ? mn + x / 65534 * (mx - mn)
+          : mode === 2 ? Math.exp(lmn + x / 65534 * dl)
+          : x === 0 ? 0 : Math.exp(lmn + (x - 1) / 65533 * dl);
+      }
+      return (vals[k] = out);
+    },
+    // sorted finite values: colour range (min/max) and the percentile in the cell panel
+    stats(k) {
+      if (stats[k]) return stats[k];
+      const v = this.values(k), buf = new Float64Array(n);
+      let m = 0;
+      for (let i = 0; i < n; i++) if (v[i] === v[i]) buf[m++] = v[i];
+      const sorted = buf.subarray(0, m).sort();             // native numeric sort
+      const bound = (x, upper) => { let lo = 0, hi = m; while (lo < hi) { const mid = (lo + hi) >> 1; if (upper ? sorted[mid] <= x : sorted[mid] < x) lo = mid + 1; else hi = mid; } return lo; };
+      return (stats[k] = { sorted, m, min: sorted[0], max: sorted[m - 1], bound });
+    },
+    // grid index -> row in this species (-1 if absent)
+    rowOf(h) {
+      if (!pos) { pos = new Int32Array(GRID.N).fill(-1); for (let i = 0; i < n; i++) pos[gidx[i]] = i; }
+      return pos[h];
+    },
+    bounds() {
+      if (lonlatBox) return lonlatBox;
+      let w = 180, s = 90, e = -180, nn = -90;
+      for (let i = 0; i < n; i++) {
+        const h = gidx[i], lo = GRID.centre[h * 2], la = GRID.centre[h * 2 + 1];
+        if (lo < w) w = lo; if (lo > e) e = lo; if (la < s) s = la; if (la > nn) nn = la;
+      }
+      return (lonlatBox = [[w - 0.05, s - 0.03], [e + 0.05, nn + 0.03]]);
+    }
+  };
+  return sp;
+}
+
+function loadSpecies(id) {
+  if (cache.has(id)) { const d = cache.get(id); cache.delete(id); cache.set(id, d); return Promise.resolve(d); }
+  if (inflight.has(id)) return inflight.get(id);
+  const p = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    let done = false;
+    window.CMAP.pending[id] = (meta, b64) => {
+      done = true;
+      try { resolve(decodeSpecies(id, meta, b64)); } catch (err) { reject(err); }
+    };
+    s.async = true;
+    s.src = `data/species/${encodeURIComponent(id)}.js${httpVersion}`;
+    s.onload = () => { s.remove(); if (!done) { delete window.CMAP.pending[id]; reject(new Error(`Invalid data file for ${id}`)); } };
+    s.onerror = () => { s.remove(); delete window.CMAP.pending[id]; reject(new Error(`Could not load data for ${id}`)); };
+    document.head.appendChild(s);
+  }).then(d => {
+    inflight.delete(id);
+    cache.set(id, d);
+    while (cache.size > CACHE_MAX) {
+      const oldest = cache.keys().next().value;
+      if (oldest === state.species) { const v = cache.get(oldest); cache.delete(oldest); cache.set(oldest, v); continue; }
+      cache.delete(oldest);
+    }
+    return d;
+  }, err => { inflight.delete(id); throw err; });
+  inflight.set(id, p);
+  return p;
+}
+
+/* =====================================================================
+   WebGL hex layer (MapLibre custom layer)
+   ===================================================================== */
+const VS = `precision highp float;
+attribute vec2 a_pos;
+attribute float a_edge;
+attribute float a_idx;
+attribute float a_t;
+uniform mat4 u_matrix;
+uniform float u_hover;
+uniform float u_sel;
+uniform float u_domain;
+varying float v_t;
+varying float v_edge;
+varying float v_flag;
+void main() {
+  float flag = abs(a_idx - u_hover) < 0.5 ? 1.0 : (abs(a_idx - u_sel) < 0.5 ? 2.0 : 0.0);
+  v_t = a_t; v_edge = a_edge; v_flag = flag;
+  bool hidden = a_t < -0.5 && a_t > -1.5 && u_domain < 0.5 && flag < 0.5;
+  gl_Position = hidden ? vec4(2.0, 2.0, 2.0, 1.0) : u_matrix * vec4(a_pos, 0.0, 1.0);
+}`;
+const FS = `#extension GL_OES_standard_derivatives : enable
+precision highp float;
+uniform sampler2D u_cmap;
+uniform float u_opacity;
+uniform float u_steps;
+uniform float u_domain;
+uniform float u_outline;
+uniform vec4 u_domainColor;
+uniform vec4 u_nanColor;
+uniform vec4 u_lineColor;
+uniform vec4 u_hoverColor;
+uniform vec4 u_selColor;
+varying float v_t;
+varying float v_edge;
+varying float v_flag;
+void main() {
+  vec4 c;
+  if (v_t >= 0.0) {
+    float t = v_t;
+    if (u_steps > 0.5) t = (min(floor(t * u_steps), u_steps - 1.0) + 0.5) / u_steps;
+    c = vec4(texture2D(u_cmap, vec2(t * 0.99609375 + 0.001953125, 0.5)).rgb, u_opacity);
+  } else if (v_t > -1.5) {
+    c = u_domain > 0.5 ? u_domainColor : vec4(0.0);
+  } else {
+    c = u_nanColor;
+  }
+  float fw = fwidth(v_edge);
+  if (u_outline > 0.0 && c.a > 0.0) {
+    float vis = 1.0 - smoothstep(0.08, 0.2, fw);
+    float a = smoothstep(1.0 - 1.6 * fw, 1.0 - 0.4 * fw, v_edge) * u_outline * vis * u_lineColor.a;
+    c.rgb = mix(c.rgb, u_lineColor.rgb, a);
+    c.a = max(c.a, a);
+  }
+  if (v_flag > 0.5) {
+    vec4 hc = v_flag < 1.5 ? u_hoverColor : u_selColor;
+    float a = fw > 0.25 ? 1.0 : smoothstep(1.0 - 3.6 * fw, 1.0 - 2.6 * fw, v_edge);
+    c = mix(c, hc, a);
+  }
+  gl_FragColor = vec4(c.rgb * c.a, c.a);
+}`;
+function toGLSL3(src, frag) {
+  src = src.replace('#extension GL_OES_standard_derivatives : enable\n', '');
+  if (frag) src = src.replace(/\bvarying\b/g, 'in').replace(/\btexture2D\b/g, 'texture').replace(/\bgl_FragColor\b/g, 'fragColor').replace('precision highp float;', 'precision highp float;\nout vec4 fragColor;');
+  else src = src.replace(/\battribute\b/g, 'in').replace(/\bvarying\b/g, 'out');
+  return '#version 300 es\n' + src;
+}
+
+class HexLayer {
+  constructor(grid) {
+    this.id = 'hexes'; this.type = 'custom'; this.renderingMode = '2d';
+    this.grid = grid;
+    this.t = new Float32Array(grid.N * 7).fill(-1);
+    this.tDirty = true;
+    this.lut = makeLut('viridis', false); this.lutDirty = true;
+    this.mat = new Float32Array(16);
+    this.u = { opacity: 1, steps: 0, domain: 1, outline: 1, hover: -1, sel: -1,
+      domainColor: [0.4, 0.45, 0.5, 0.16], nanColor: [0.5, 0.5, 0.5, 0.5], lineColor: [0, 0, 0, 0.3],
+      hoverColor: [0.07, 0.09, 0.11, 1], selColor: [0.88, 0.11, 0.28, 1] };
+    this.gl = null;
+  }
+  setValues(gidx, t) {
+    const T = this.t; T.fill(-1);
+    for (let i = 0, n = gidx.length; i < n; i++) {
+      const v = t[i] === t[i] ? t[i] : -2, p = gidx[i] * 7;
+      T[p] = v; T[p + 1] = v; T[p + 2] = v; T[p + 3] = v; T[p + 4] = v; T[p + 5] = v; T[p + 6] = v;
+    }
+    this.tDirty = true;
+  }
+  setLut(lut) { this.lut = lut; this.lutDirty = true; }
+  onAdd(map, gl) {
+    this.map = map;
+    if (this.gl === gl && this.prog) return;   // resources survive basemap (style) changes
+    this.gl = gl;
+    const isGL2 = typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
+    if (!isGL2) {
+      if (!gl.getExtension('OES_element_index_uint') || !gl.getExtension('OES_standard_derivatives')) {
+        fatal('<b>Your browser’s WebGL does not support the features this map needs.</b><br><br>Please try an up-to-date Chrome, Edge, Firefox or Safari.');
+        return;
+      }
+    }
+    const compile = (type, src) => {
+      const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+      return s;
+    };
+    const prog = gl.createProgram();
+    gl.attachShader(prog, compile(gl.VERTEX_SHADER, isGL2 ? toGLSL3(VS, false) : VS));
+    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, isGL2 ? toGLSL3(FS, true) : FS));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+    this.prog = prog;
+    this.loc = {};
+    for (const a of ['a_pos', 'a_edge', 'a_idx', 'a_t']) this.loc[a] = gl.getAttribLocation(prog, a);
+    for (const u of ['u_matrix', 'u_hover', 'u_sel', 'u_domain', 'u_cmap', 'u_opacity', 'u_steps', 'u_outline', 'u_domainColor', 'u_nanColor', 'u_lineColor', 'u_hoverColor', 'u_selColor'])
+      this.loc[u] = gl.getUniformLocation(prog, u);
+
+    this.vbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, this.grid.vert, gl.STATIC_DRAW);
+    this.tbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.tbo);
+    gl.bufferData(gl.ARRAY_BUFFER, this.t, gl.DYNAMIC_DRAW);
+    this.ibo = gl.createBuffer();
+    this.count = this.grid.index.length;
+
+    // a private vertex array object so MapLibre's VAO state is never touched
+    const vaoExt = isGL2 ? null : gl.getExtension('OES_vertex_array_object');
+    this.bindVao = isGL2 ? v => gl.bindVertexArray(v) : vaoExt ? v => vaoExt.bindVertexArrayOES(v) : null;
+    this.vao = isGL2 ? gl.createVertexArray() : vaoExt ? vaoExt.createVertexArrayOES() : null;
+    if (this.vao) this.bindVao(this.vao);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ibo);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.grid.index, gl.STATIC_DRAW);
+    if (this.vao) { this.setupAttribs(gl); this.bindVao(null); }
+
+    this.tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this.lutDirty = true; this.tDirty = false;
+  }
+  setupAttribs(gl) {
+    const L = this.loc;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
+    gl.enableVertexAttribArray(L.a_pos);  gl.vertexAttribPointer(L.a_pos, 2, gl.FLOAT, false, 16, 0);
+    gl.enableVertexAttribArray(L.a_edge); gl.vertexAttribPointer(L.a_edge, 1, gl.FLOAT, false, 16, 8);
+    gl.enableVertexAttribArray(L.a_idx);  gl.vertexAttribPointer(L.a_idx, 1, gl.FLOAT, false, 16, 12);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.tbo);
+    gl.enableVertexAttribArray(L.a_t);    gl.vertexAttribPointer(L.a_t, 1, gl.FLOAT, false, 4, 0);
+  }
+  onRemove() { /* keep GPU resources for re-use after a style change */ }
+  render(gl, m) {
+    if (!this.prog) return;
+    const L = this.loc, u = this.u;
+    gl.useProgram(this.prog);
+    if (this.vao) this.bindVao(this.vao);
+    else { gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ibo); this.setupAttribs(gl); }
+    if (this.tDirty) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.tbo);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.t);
+      this.tDirty = false;
+    }
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.tex);
+    if (this.lutDirty) {
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, this.lut);
+      this.lutDirty = false;
+    }
+    // shift the camera matrix to the render origin in double precision
+    const mm = this.mat, ox = this.grid.ox, oy = this.grid.oy;
+    for (let i = 0; i < 16; i++) mm[i] = m[i];
+    mm[12] = m[0] * ox + m[4] * oy + m[12];
+    mm[13] = m[1] * ox + m[5] * oy + m[13];
+    mm[14] = m[2] * ox + m[6] * oy + m[14];
+    mm[15] = m[3] * ox + m[7] * oy + m[15];
+    gl.uniformMatrix4fv(L.u_matrix, false, mm);
+    gl.uniform1i(L.u_cmap, 0);
+    gl.uniform1f(L.u_hover, u.hover); gl.uniform1f(L.u_sel, u.sel);
+    gl.uniform1f(L.u_domain, u.domain); gl.uniform1f(L.u_opacity, u.opacity);
+    gl.uniform1f(L.u_steps, u.steps); gl.uniform1f(L.u_outline, u.outline);
+    gl.uniform4fv(L.u_domainColor, u.domainColor); gl.uniform4fv(L.u_nanColor, u.nanColor);
+    gl.uniform4fv(L.u_lineColor, u.lineColor); gl.uniform4fv(L.u_hoverColor, u.hoverColor); gl.uniform4fv(L.u_selColor, u.selColor);
+    gl.disable(gl.DEPTH_TEST); gl.disable(gl.STENCIL_TEST); gl.disable(gl.CULL_FACE);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.drawElements(gl.TRIANGLES, this.count, gl.UNSIGNED_INT, 0);
+    if (this.vao) this.bindVao(null);
+    else for (const a of ['a_pos', 'a_edge', 'a_idx', 'a_t']) gl.disableVertexAttribArray(L[a]);
+  }
+}
+
+/* =====================================================================
+   Application state
+   ===================================================================== */
+const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
+const state = {
+  species: null,
+  col: 'source_strength_tukey',
+  cmap: 'RdYlBu', reverse: false,   // colours always run linearly from the species' min to max
+  basemap: 'light',
+  exportArea: 'baltic', exportFormat: 'png', exportScale: 2,
+  theme: null,              // null = follow system
+  // filters
+  groups: new Set(), mobility: 'all', archetypes: new Set(), query: '',
+  visible: [],
+  selCell: -1, hoverCell: -1
+};
+if (!COL_BY_ID[state.col]) state.col = COLS[0].id;
+
+// optional state from the URL hash (used by "Copy link")
+const hashParams = new URLSearchParams(location.hash.slice(1));
+(function readHash(h) {
+  if (h.has('sp') && SP_BY_ID[h.get('sp')]) state.species = h.get('sp');
+  if (h.has('v') && COL_BY_ID[h.get('v')]) state.col = h.get('v');
+  if (h.has('cm') && CMAP_STOPS[h.get('cm')]) state.cmap = h.get('cm');
+  if (h.get('rev') === '1') state.reverse = true;
+  const bm = BASEMAPS[h.get('bm')];
+  if (bm && !bm.hidden) state.basemap = h.get('bm');
+})(hashParams);
+try { const t = localStorage.getItem('cmap-theme'); if (t === 'light' || t === 'dark') state.theme = t; } catch (e) { /* storage unavailable */ }
+
+const isDark = () => state.theme ? state.theme === 'dark' : prefersDark.matches;
+function applyTheme() {
+  if (state.theme) document.documentElement.setAttribute('data-theme', state.theme);
+  else document.documentElement.setAttribute('data-theme', prefersDark.matches ? 'dark' : 'light');
+}
+applyTheme();
+if (navigator.onLine === false) state.basemap = 'offline';
+
+/* =====================================================================
+   Map
+   ===================================================================== */
+const layer = new HexLayer(GRID);
+let map;
+const gb = GRID.bbox;
+const GRID_BOUNDS = [[gb[0], gb[1]], [gb[2], gb[3]]];
+
+function fitPadding() {
+  // keep the data clear of the panel (right side on desktop, bottom on phones)
+  const panel = $('panel');
+  if (window.innerWidth <= 860) return { top: 20, bottom: panel.offsetHeight + 44, left: 20, right: 20 };
+  return { top: 30, bottom: 30, left: 40, right: panel.offsetWidth + 30 };
+}
+
+function offlineStyle() {
+  const dk = isDark();
+  return {
+    version: 8,
+    sources: { land: { type: 'geojson', data: window.CMAP.land || { type: 'FeatureCollection', features: [] } } },
+    layers: [
+      { id: 'water', type: 'background', paint: { 'background-color': dk ? '#0f1b25' : '#dde7ee' } },
+      { id: 'land', type: 'fill', source: 'land', paint: { 'fill-color': dk ? '#1d252c' : '#f7f6f2' } },
+      { id: 'coast', type: 'line', source: 'land', paint: { 'line-color': dk ? '#3a4a57' : '#aebbc5', 'line-width': 0.6 } }
+    ]
+  };
+}
+let landRequested = false;
+function ensureLand() {
+  if (window.CMAP.land || landRequested) return;
+  landRequested = true;
+  window.CMAP.onLand = g => { const src = map && map.getSource('land'); if (src) src.setData(g); };
+  const s = document.createElement('script'); s.src = `data/land.js${httpVersion}`; s.async = true;
+  s.onerror = () => { landRequested = false; };
+  document.head.appendChild(s);
+}
+
+function overlayColours() {
+  const bm = BASEMAPS[state.basemap];
+  const dark = bm.dark == null ? isDark() : bm.dark;
+  const u = layer.u;
+  u.domainColor = dark ? [0.85, 0.89, 0.93, 0.13] : [0.36, 0.42, 0.48, 0.15];
+  u.lineColor = dark ? [1, 1, 1, 0.28] : [0.06, 0.09, 0.12, 0.28];
+  u.hoverColor = dark ? [1, 1, 1, 1] : [0.05, 0.07, 0.09, 1];
+  u.selColor = dark ? [1, 0.36, 0.55, 1] : [0.86, 0.09, 0.3, 1];
+}
+
+let styleLoading = false;
+function styleFor(key) { const s = BASEMAPS[key].style; return typeof s === 'function' ? s() : s; }
+
+function addOverlays() {
+  styleLoading = false;
+  if (map.getLayer('hexes')) return;
+  const bm = BASEMAPS[state.basemap];
+  let before = bm.before;
+  if (!before) {
+    const firstSymbol = map.getStyle().layers.find(l => l.type === 'symbol');
+    before = firstSymbol ? firstSymbol.id : undefined;
+  }
+  map.addLayer(layer, before && map.getLayer(before) ? before : undefined);
+  if (state.basemap === 'offline') ensureLand();
+}
+
+function setBasemap(key, opts = {}) {
+  if (!BASEMAPS[key]) return;
+  state.basemap = key;
+  overlayColours();
+  syncSeg('baseSeg', key);
+  if (!map) return;
+  styleLoading = true;
+  map.setStyle(styleFor(key), { diff: false });
+  if (!opts.silent) map.triggerRepaint();
+}
+
+function initMap() {
+  overlayColours();
+  const view = hashParams.get('at');
+  const opts = {
+    container: 'map',
+    style: styleFor(state.basemap),
+    bounds: GRID_BOUNDS,
+    fitBoundsOptions: { padding: fitPadding() },
+    minZoom: 3, maxZoom: 13,
+    maxBounds: [[gb[0] - 25, gb[1] - 12], [gb[2] + 25, gb[3] + 10]],
+    dragRotate: false, pitchWithRotate: false, touchPitch: false, keyboard: false,
+    renderWorldCopies: false, antialias: true, fadeDuration: 0,
+    attributionControl: { compact: true }
+  };
+  if (view) {
+    const [lat, lng, z] = view.split(',').map(Number);
+    if ([lat, lng, z].every(isFinite)) { delete opts.bounds; opts.center = [lng, lat]; opts.zoom = z; }
+  }
+  styleLoading = true;
+  map = new maplibregl.Map(opts);
+  map.touchZoomRotate.disableRotation();
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-left');
+  map.addControl(new maplibregl.ScaleControl({ maxWidth: 110 }), 'bottom-left');
+  map.on('style.load', addOverlays);
+  map.on('error', e => {
+    // an online basemap failed to load (offline, blocked, ...): fall back to the offline one
+    if (styleLoading && BASEMAPS[state.basemap].online && !map.isStyleLoaded()) {
+      console.warn('Basemap failed to load, falling back to offline map', e && e.error);
+      toast('Online basemap unavailable – showing the offline land mask instead.');
+      setBasemap('offline');
+    }
+  });
+  // reveal the app once the map has rendered (or after a timeout if the basemap is slow)
+  const reveal = () => $('boot').classList.add('done');
+  map.once('load', reveal);
+  setTimeout(reveal, 6000);
+  setupPicking();
+}
+
+/* =====================================================================
+   Colour scaling
+   ===================================================================== */
+let current = null;              // decoded data of the species on the map
+const tBuf = { arr: new Float32Array(0) };
+
+// colour range: always the selected species' own min – max, on a linear scale
+function domainFor(sp, col) {
+  const s = sp.stats(col.k);
+  let lo = s.m ? s.min : 0, hi = s.m ? s.max : 1;
+  if (!(hi > lo)) hi = lo + (Math.abs(lo) || 1);
+  return { lo, hi };
+}
+
+function recompute() {
+  const sp = current; if (!sp) return;
+  const col = COL_BY_ID[state.col];
+  const v = sp.values(col.k), n = sp.n;
+  if (tBuf.arr.length < n) tBuf.arr = new Float32Array(Math.max(n, 1024));
+  const t = tBuf.arr.subarray(0, n);
+  const dom = domainFor(sp, col), lo = dom.lo, d = dom.hi - dom.lo;
+  for (let i = 0; i < n; i++) {
+    const x = v[i];
+    t[i] = x !== x ? NaN : clamp((x - lo) / d, 0, 1);
+  }
+  layer.setValues(sp.gidx, t);
+  map && map.triggerRepaint();
+  drawLegend(col);
+  renderCell();
+}
+
+/* =====================================================================
+   Legend
+   ===================================================================== */
+const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+// colour bar labelled Low / Medium / High (values are relative within the species), in CSS pixels of ctx;
+// shared by the panel legend and the image export
+function paintColourBar(ctx, x0, y, bw, textCol, lineCol) {
+  const barH = 14, lut = layer.lut;
+  const colourAt = t => { const i = Math.round(clamp(t, 0, 1) * 255) * 4; return `rgb(${lut[i]},${lut[i + 1]},${lut[i + 2]})`; };
+  for (let px = 0; px < bw; px++) { ctx.fillStyle = colourAt(px / (bw - 1)); ctx.fillRect(x0 + px, y, 1.2, barH); }
+  ctx.strokeStyle = lineCol; ctx.lineWidth = 1; ctx.strokeRect(x0 + 0.5, y + 0.5, bw - 1, barH - 1);
+  ctx.font = `11.5px ${FONT}`; ctx.textBaseline = 'top'; ctx.fillStyle = textCol;
+  const ly = y + barH + 5;
+  ctx.textAlign = 'left'; ctx.fillText('Low', x0, ly);
+  ctx.textAlign = 'center'; ctx.fillText('Medium', x0 + bw / 2, ly);
+  ctx.textAlign = 'right'; ctx.fillText('High', x0 + bw, ly);
+  ctx.textAlign = 'left';
+}
+
+const legCanvas = $('legCanvas');
+let lastLegend = null;
+function drawLegend(col) {
+  lastLegend = [col];
+  $('legTitle').textContent = col.label;
+  $('legUnit').textContent = col.unit ? `(${col.unit})` : '';
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const W = legCanvas.clientWidth || 316, H = 34;
+  if (legCanvas.width !== Math.round(W * dpr)) { legCanvas.width = Math.round(W * dpr); legCanvas.height = Math.round(H * dpr); }
+  const ctx = legCanvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  const css = getComputedStyle(document.documentElement);
+  paintColourBar(ctx, 1, 1, W - 2, css.getPropertyValue('--muted').trim(), css.getPropertyValue('--border-strong').trim());
+}
+
+/* =====================================================================
+   Species selection
+   ===================================================================== */
+let loadTimer = 0, spinTimer = 0, prefetchTimer = 0;
+function setLoading(on) {
+  clearTimeout(spinTimer);
+  if (on) spinTimer = setTimeout(() => { $('spin').classList.add('on'); $('loadbar').classList.add('on'); }, 120);
+  else { $('spin').classList.remove('on'); $('loadbar').classList.remove('on'); }
+}
+
+function selectSpecies(id, opts = {}) {
+  const sp = SP_BY_ID[id];
+  if (!sp) return;
+  const prev = state.species;
+  state.species = id;
+  // list highlight
+  if (prev && rowEls[prev]) rowEls[prev].setAttribute('aria-selected', 'false');
+  const row = rowEls[id];
+  if (row) {
+    row.setAttribute('aria-selected', 'true');
+    $('list').setAttribute('aria-activedescendant', row.id);
+    if (opts.scroll !== false) scrollRowIntoView(row);
+  }
+  renderSpeciesCard(sp);
+
+  clearTimeout(loadTimer);
+  const go = () => {
+    const cached = cache.has(id);
+    if (!cached) setLoading(true);
+    loadSpecies(id).then(d => {
+      if (state.species !== id) return;      // user moved on meanwhile
+      setLoading(false);
+      current = d;
+      recompute();
+      schedulePrefetch(opts.dir || 1);
+    }, err => {
+      if (state.species !== id) return;
+      setLoading(false);
+      console.error(err);
+      toast(err.message || String(err));
+    });
+  };
+  // while an arrow key is held down, don't start a download for every species skipped past
+  if (opts.repeat && !cache.has(id)) loadTimer = setTimeout(go, 90); else go();
+}
+
+function schedulePrefetch(dir) {
+  clearTimeout(prefetchTimer);
+  prefetchTimer = setTimeout(() => {
+    const vis = state.visible, i = vis.indexOf(state.species);
+    if (i < 0) return;
+    const order = dir > 0 ? [1, 2, -1, 3] : [-1, -2, 1, -3];
+    order.forEach(o => prefetchPhoto(vis[i + o]));
+    const todo = order.map(o => vis[i + o]).filter(id => id && !cache.has(id) && !inflight.has(id));
+    const run = () => { const id = todo.shift(); if (id) loadSpecies(id).catch(() => {}).then(() => idle(run)); };
+    const idle = fn => (window.requestIdleCallback ? requestIdleCallback(fn, { timeout: 800 }) : setTimeout(fn, 30));
+    idle(run);
+  }, 150);
+}
+
+function step(delta, repeat) {
+  const vis = state.visible;
+  if (!vis.length) return;
+  let i = vis.indexOf(state.species);
+  if (i < 0) i = delta > 0 ? -1 : vis.length;
+  const j = clamp(i + delta, 0, vis.length - 1);
+  if (vis[j] !== state.species) selectSpecies(vis[j], { repeat, dir: delta });
+}
+
+function renderSpeciesCard(sp) {
+  // allow a line break after the "/" in species pairs
+  $('spname').textContent = sp.name.replace(/\//g, '/​');
+  $('spname').classList.toggle('long', sp.name.length > 24);
+  document.title = `${sp.name} – Baltic Connectivity Explorer`;
+  const a = M.archetypes[sp.archetype] || null;
+  const tags = [];
+  tags.push(`<span class="tag"><span class="dot g-${escapeHtml(sp.group)}"></span><b>${escapeHtml(GROUP_SINGULAR[sp.group] || prettify(sp.group))}</b></span>`);
+  tags.push(`<span class="tag">${escapeHtml(mobilityLabel(sp.mobility))}</span>`);
+  if (sp.archetype) tags.push(`<span class="tag" title="Archetype">${escapeHtml(sp.archetype)}${a && a.matrix ? ` · ${escapeHtml(a.matrix)}` : ''}</span>`);
+  if (a && a.dispersal) {
+    let drift = '';
+    if (a.drift_avg != null) drift = a.drift_min != null && a.drift_max != null ? ` · drift ${a.drift_min}–${a.drift_max} d` : ` · drift ${a.drift_avg} d`;
+    tags.push(`<span class="tag">${escapeHtml(prettify(a.dispersal))} dispersal${drift}</span>`);
+  }
+  const season = a && seasonText(a.season);
+  if (season) tags.push(`<span class="tag">Season: ${escapeHtml(season)}</span>`);
+  tags.push(`<span class="tag">${nfInt.format(sp.n)} cells</span>`);
+  $('sptags').innerHTML = tags.join('');
+  const d = $('spdesc');
+  if (a && a.description) { d.textContent = a.description; d.hidden = false; } else d.hidden = true;
+  renderPhoto(sp);
+}
+
+/* ---- common names and photo (data/details.js, built by tools/build_details.R) ---- */
+const DETAILS = window.CMAP.details || {};
+const detailText = Object.create(null);
+function detailSearch(id) {
+  let s = detailText[id];
+  if (s == null) {
+    const d = DETAILS[id] || {};
+    s = detailText[id] = [d.common, d.swedish, d.other].filter(Boolean).join(' | ').toLowerCase();
+  }
+  return s;
+}
+const photoUrl = id => `data/img/${encodeURIComponent(id)}.jpg${httpVersion}`;
+const LICENCE_LABEL = { PD: 'public domain', CC0: 'CC0' };
+function photoCredit(m) {
+  // iNaturalist credits read "(c) Name, some rights reserved (CC BY-NC), uploaded by Name": keep the name
+  const who = (m.credit || '').replace(/^\(c\)\s*/i, '').replace(/,\s*(some|all) rights reserved.*$/i, '')
+    .replace(/,\s*no known copyright.*$/i, '').replace(/,?\s*uploaded by .*$/i, '').trim();
+  const lic = m.licence ? (LICENCE_LABEL[m.licence] || m.licence.replace(/^CC-/, 'CC ')) : '';
+  const src = (m.source || '').split(' ')[0];
+  const parts = [who ? `© ${escapeHtml(who)}` : '', escapeHtml(lic), escapeHtml(src)].filter(Boolean).join(' · ');
+  const html = m.page ? `<a href="${escapeHtml(m.page)}" target="_blank" rel="noopener">${parts || 'Photo source'}</a>` : parts;
+  return `Photo: ${html}`;
+}
+function renderPhoto(sp) {
+  const d = DETAILS[sp.id] || {};
+  const com = $('spcom');
+  com.textContent = d.common || 'No English common name';
+  com.classList.toggle('missing', !d.common);
+  const sv = $('spsv');
+  sv.hidden = !d.swedish;
+  sv.textContent = d.swedish ? `Swedish: ${d.swedish}` : '';
+  const ph = $('spph'), img = $('spimg'), old = ph.querySelector('.none');
+  if (old) old.remove();
+  img.classList.remove('on');
+  img.onload = img.onerror = null;
+  $('spcr').innerHTML = d.img ? photoCredit(d.img) : '';
+  $('spcr').title = d.img && d.img.credit ? d.img.credit : '';
+  const noPhoto = msg => {
+    img.hidden = true; img.removeAttribute('src');
+    ph.insertAdjacentHTML('beforeend', `<div class="none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg><span>${msg}</span></div>`);
+  };
+  if (!d.img) { noPhoto('No photo available'); return; }
+  img.hidden = false;
+  img.alt = `Photo of ${sp.name}`;
+  img.onload = () => { if (state.species === sp.id) img.classList.add('on'); };
+  img.onerror = () => { if (state.species === sp.id) noPhoto('Photo could not be loaded'); };
+  img.src = photoUrl(sp.id);
+  if (img.complete && img.naturalWidth) img.classList.add('on');
+}
+const photoPrefetched = new Set();
+function prefetchPhoto(id) {
+  if (!id || photoPrefetched.has(id) || !(DETAILS[id] && DETAILS[id].img)) return;
+  photoPrefetched.add(id);
+  new Image().src = photoUrl(id);
+}
+
+/* =====================================================================
+   Species list & filters
+   ===================================================================== */
+const rowEls = {};
+function buildList() {
+  const list = $('list'), frag = document.createDocumentFragment();
+  SPECIES.forEach((s, i) => {
+    const el = document.createElement('div');
+    el.className = 'sp'; el.setAttribute('role', 'option'); el.id = `sp-${i}`; el.dataset.id = s.id;
+    el.setAttribute('aria-selected', 'false');
+    el.innerHTML = `<span class="dot g-${escapeHtml(s.group)}"></span><span class="nm">${escapeHtml(s.name)}</span><span class="ar">${escapeHtml(s.archetype || '')}</span>`;
+    const common = DETAILS[s.id] && DETAILS[s.id].common;
+    el.title = `${s.name}${common ? ` (${common})` : ''} – ${groupLabel(s.group)}, ${mobilityLabel(s.mobility).toLowerCase()}${s.archetype ? ', ' + s.archetype : ''}`;
+    rowEls[s.id] = el; frag.appendChild(el);
+  });
+  const empty = document.createElement('div'); empty.className = 'empty'; empty.id = 'emptyMsg'; empty.hidden = true;
+  empty.textContent = 'No species match the current filters.';
+  frag.appendChild(empty);
+  list.appendChild(frag);
+  list.addEventListener('click', e => {
+    const row = e.target.closest('.sp'); if (!row) return;
+    selectSpecies(row.dataset.id, { scroll: false });
+    if (window.innerWidth <= 860) $('app').classList.remove('side-open');
+  });
+}
+function scrollRowIntoView(row) {
+  const list = $('list'), top = row.offsetTop, bottom = top + row.offsetHeight;
+  if (top < list.scrollTop + 4) list.scrollTop = top - 4;
+  else if (bottom > list.scrollTop + list.clientHeight - 4) list.scrollTop = bottom - list.clientHeight + 4;
+}
+
+function buildFilters() {
+  const groups = {};
+  for (const s of SPECIES) groups[s.group] = (groups[s.group] || 0) + 1;
+  const gc = $('groupChips');
+  for (const g of Object.keys(groups).sort()) {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.dataset.g = g; b.setAttribute('aria-pressed', 'false');
+    b.innerHTML = `<span class="dot g-${escapeHtml(g)}"></span>${escapeHtml(groupLabel(g))}<span class="n">${groups[g]}</span>`;
+    b.onclick = () => { toggleSet(state.groups, g); b.setAttribute('aria-pressed', state.groups.has(g)); applyFilters(); };
+    gc.appendChild(b);
+  }
+  makeSeg('mobSeg', [['all', 'All'], ['mobile', 'Mobile'], ['non-mobile', 'Non-mobile']], state.mobility, v => { state.mobility = v; applyFilters(); });
+
+  // archetype chips, grouped by species group
+  const arch = {};
+  for (const s of SPECIES) if (s.archetype) { (arch[s.group] = arch[s.group] || {}); arch[s.group][s.archetype] = (arch[s.group][s.archetype] || 0) + 1; }
+  const ac = $('archChips');
+  for (const g of Object.keys(arch).sort()) {
+    const wrap = document.createElement('div'); wrap.className = 'arch-group';
+    wrap.innerHTML = `<div class="flabel">${escapeHtml(groupLabel(g))}</div>`;
+    const chips = document.createElement('div'); chips.className = 'chips';
+    const ids = Object.keys(arch[g]).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+    for (const id of ids) {
+      const b = document.createElement('button');
+      b.className = 'chip small'; b.dataset.a = id; b.setAttribute('aria-pressed', 'false');
+      const info = M.archetypes[id];
+      if (info && info.description) b.title = info.description;
+      b.innerHTML = `${escapeHtml(id)}<span class="n">${arch[g][id]}</span>`;
+      b.onclick = () => { toggleSet(state.archetypes, id); b.setAttribute('aria-pressed', state.archetypes.has(id)); applyFilters(); };
+      chips.appendChild(b);
+    }
+    wrap.appendChild(chips); ac.appendChild(wrap);
+  }
+  let searchTimer = 0;
+  $('search').addEventListener('input', e => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => { state.query = e.target.value; applyFilters(); }, 90);
+  });
+  $('clearFilters').onclick = () => {
+    state.groups.clear(); state.archetypes.clear(); state.mobility = 'all'; state.query = ''; $('search').value = '';
+    document.querySelectorAll('#groupChips .chip, #archChips .chip').forEach(b => b.setAttribute('aria-pressed', 'false'));
+    syncSeg('mobSeg', 'all');
+    applyFilters();
+  };
+}
+function toggleSet(set, v) { if (set.has(v)) set.delete(v); else set.add(v); }
+
+function applyFilters(opts = {}) {
+  const q = state.query.trim().toLowerCase().replace(/[._]+/g, ' ').replace(/\s+/g, ' ');
+  const vis = [];
+  for (const s of SPECIES) {
+    const ok = (!state.groups.size || state.groups.has(s.group))
+      && (state.mobility === 'all' || s.mobility === state.mobility)
+      && (!state.archetypes.size || state.archetypes.has(s.archetype))
+      && (!q || s.name.toLowerCase().includes(q) || (s.archetype || '').toLowerCase() === q || detailSearch(s.id).includes(q));
+    rowEls[s.id].hidden = !ok;
+    if (ok) vis.push(s.id);
+  }
+  state.visible = vis;
+  const filtered = state.groups.size || state.archetypes.size || state.mobility !== 'all' || q;
+  $('count').textContent = filtered ? `${vis.length} of ${SPECIES.length} species` : `${SPECIES.length} species`;
+  $('clearFilters').hidden = !filtered;
+  $('emptyMsg').hidden = vis.length > 0;
+  $('archCount').textContent = state.archetypes.size ? `(${state.archetypes.size})` : '';
+  if (opts.select === false) return;
+  if (vis.length && !vis.includes(state.species)) selectSpecies(vis[0]);
+  else if (state.species && rowEls[state.species]) scrollRowIntoView(rowEls[state.species]);
+}
+
+/* =====================================================================
+   Display controls
+   ===================================================================== */
+function makeSeg(id, options, value, onChange) {
+  const el = $(id); el.innerHTML = '';
+  for (const [v, label, title] of options) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.dataset.v = v; b.textContent = label; if (title) b.title = title;
+    b.setAttribute('aria-pressed', String(v) === String(value));
+    b.onclick = () => { if (b.disabled) return; syncSeg(id, v); onChange(v); };
+    el.appendChild(b);
+  }
+}
+function syncSeg(id, value) { for (const b of $(id).children) b.setAttribute('aria-pressed', b.dataset.v === String(value)); }
+
+const varButtons = {};
+function buildVarGrid() {
+  const g = $('vargrid');
+  g.innerHTML = '<span></span><span class="vh" title="What a cell sends out">Source</span><span class="vh" title="What a cell receives">Sink</span>';
+  const used = new Set();
+  const rows = [];
+  for (const r of METRIC_ROWS) {
+    const s = COL_BY_ID[r.source] ? r.source : null, k = COL_BY_ID[r.sink] ? r.sink : null;
+    if (!s && !k) continue;
+    rows.push({ label: r.label, source: s, sink: k }); if (s) used.add(s); if (k) used.add(k);
+  }
+  // any columns not covered above (e.g. new columns in the GeoPackages)
+  for (const c of COLS) {
+    if (used.has(c.id)) continue;
+    const m = c.id.match(/^source_(.+)$/), partner = m && COL_BY_ID['sink_' + m[1]];
+    if (m && partner && !used.has(partner.id)) { rows.push({ label: prettify(m[1]), source: c.id, sink: partner.id }); used.add(c.id); used.add(partner.id); }
+    else if (!/^sink_/.test(c.id) || !COL_BY_ID['source_' + c.id.slice(5)]) { rows.push({ label: c.label, single: c.id }); used.add(c.id); }
+  }
+  rows.forEach((r, i) => {
+    const l = document.createElement('span'); l.className = 'vl'; l.textContent = r.label; l.title = `${r.label} (key ${i + 1})`;
+    g.appendChild(l);
+    const mk = (colId, text, wide) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'vbtn' + (wide ? ' wide' : ''); b.textContent = text;
+      if (!colId) { b.disabled = true; b.style.visibility = 'hidden'; g.appendChild(b); return; }
+      b.title = COL_BY_ID[colId].label; b.dataset.col = colId;
+      b.onclick = () => setColumn(colId);
+      varButtons[colId] = b; g.appendChild(b);
+    };
+    if (r.single) mk(r.single, 'Show', true); else { mk(r.source, 'Source'); mk(r.sink, 'Sink'); }
+  });
+  buildVarGrid.rows = rows;
+}
+function setColumn(id) {
+  if (!COL_BY_ID[id]) return;
+  state.col = id;
+  for (const [c, b] of Object.entries(varButtons)) b.setAttribute('aria-pressed', c === id);
+  const col = COL_BY_ID[id];
+  $('vardesc').innerHTML = `${escapeHtml(col.desc || col.label)} <code>${escapeHtml(col.id)}</code>`;
+  recompute();
+}
+function toggleSourceSink() {
+  const row = buildVarGrid.rows.find(r => r.source === state.col || r.sink === state.col);
+  if (row && row.source && row.sink) setColumn(row.source === state.col ? row.sink : row.source);
+}
+function selectRow(i) {
+  const row = buildVarGrid.rows[i]; if (!row) return;
+  const isSink = /^sink_/.test(state.col);
+  setColumn(row.single || (isSink ? row.sink || row.source : row.source || row.sink));
+}
+
+function buildColourPicker() {
+  const pop = $('cmPop');
+  for (const g of COLORMAPS) {
+    const h = document.createElement('div'); h.className = 'cg'; h.textContent = g.group; pop.appendChild(h);
+    for (const name of Object.keys(g.items)) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'cm-opt'; b.dataset.cm = name; b.setAttribute('role', 'option');
+      b.innerHTML = `<span class="sw"></span><span>${escapeHtml(name)}</span>`;
+      b.onclick = () => { setColourMap(name); closePop(); };
+      pop.appendChild(b);
+    }
+  }
+  $('cmBtn').onclick = e => { e.stopPropagation(); pop.hidden ? openPop() : closePop(); };
+  $('revBtn').onclick = () => { state.reverse = !state.reverse; setColourMap(state.cmap); };
+  document.addEventListener('pointerdown', e => { if (!pop.hidden && !pop.contains(e.target) && e.target !== $('cmBtn') && !$('cmBtn').contains(e.target)) closePop(); });
+}
+function openPop() {
+  const pop = $('cmPop'); pop.hidden = false; $('cmBtn').setAttribute('aria-expanded', 'true');
+  const cur = pop.querySelector(`[data-cm="${state.cmap}"]`); if (cur) { cur.focus({ preventScroll: true }); cur.scrollIntoView({ block: 'nearest' }); }
+}
+function closePop() { $('cmPop').hidden = true; $('cmBtn').setAttribute('aria-expanded', 'false'); }
+function setColourMap(name) {
+  state.cmap = name;
+  layer.setLut(makeLut(name, state.reverse));
+  $('cmSw').style.background = gradientCss(name, state.reverse);
+  $('cmName').textContent = name;
+  $('revBtn').setAttribute('aria-pressed', state.reverse);
+  $('revBtn').style.background = state.reverse ? 'var(--accent-soft)' : '';
+  for (const b of $('cmPop').querySelectorAll('.cm-opt')) {
+    b.setAttribute('aria-selected', b.dataset.cm === name);
+    b.firstChild.style.background = gradientCss(b.dataset.cm, state.reverse);
+  }
+  map && map.triggerRepaint();
+  if (lastLegend) drawLegend(...lastLegend);
+}
+
+function buildDisplayControls() {
+  makeSeg('baseSeg', Object.entries(BASEMAPS).filter(([, b]) => !b.hidden).map(([k, b]) => [k, b.label]), state.basemap, v => setBasemap(v));
+  makeSeg('expAreaSeg', [['baltic', 'Whole Baltic'], ['view', 'Current view', 'Centred on what the map shows now']], state.exportArea, v => { state.exportArea = v; });
+  makeSeg('expFmtSeg', [['png', 'PNG', 'Lossless – best for figures'], ['jpg', 'JPG', 'Smaller file']], state.exportFormat, v => { state.exportFormat = v; });
+  makeSeg('expSizeSeg', [['1', '1×'], ['2', '2×'], ['3', '3× (print)']], state.exportScale, v => { state.exportScale = +v; updateExportHint(); });
+  updateExportHint();
+  $('exportBtn').onclick = exportImage;
+
+  $('panelToggle').onclick = togglePanel;
+  if (window.innerWidth <= 860) togglePanel();
+
+  $('copyBtn').onclick = copyLink;
+  $('resetBtn').onclick = () => map.fitBounds(GRID_BOUNDS, { padding: fitPadding(), duration: 600 });
+  $('fitBtn').onclick = () => { if (current) map.fitBounds(current.bounds(), { padding: fitPadding(), duration: 600, maxZoom: 10 }); };
+  $('prevBtn').onclick = () => step(-1);
+  $('nextBtn').onclick = () => step(1);
+  $('themeBtn').onclick = () => {
+    state.theme = isDark() ? 'light' : 'dark';
+    try { localStorage.setItem('cmap-theme', state.theme); } catch (e) { /* ignore */ }
+    themeChanged();
+  };
+  prefersDark.addEventListener('change', () => { if (!state.theme) themeChanged(); });
+  $('helpBtn').onclick = () => $('help').showModal();
+  $('sideOpen').onclick = () => $('app').classList.add('side-open');
+  $('sideClose').onclick = () => $('app').classList.remove('side-open');
+}
+function togglePanel() {
+  const p = $('panel'), open = p.classList.toggle('collapsed') === false, b = $('panelToggle');
+  b.setAttribute('aria-expanded', open);
+  b.title = open ? 'Collapse panel' : 'Expand panel'; b.setAttribute('aria-label', b.title);
+  if (open && lastLegend) drawLegend(...lastLegend);   // the canvas had no size while hidden
+}
+function themeChanged() {
+  applyTheme();
+  if (state.basemap === 'offline') setBasemap('offline');   // the offline map follows the theme
+  else { overlayColours(); map && map.triggerRepaint(); }
+  if (lastLegend) drawLegend(...lastLegend);
+}
+
+/* =====================================================================
+   Image export: a separate, hidden map in a near-square frame (the Baltic
+   is taller than wide), drawn at 1–3× resolution, with title, legend and scale bar
+   ===================================================================== */
+const EXPORT_W = 900, EXPORT_H = 1000;        // frame in CSS pixels; the image is this × the chosen size
+const EXPORT_MARGIN = 24;                     // white space outside the map border, CSS pixels
+const MAX_CANVAS = 4096;                      // MapLibre's default maximum canvas size
+const exportRatio = () => Math.min(state.exportScale, MAX_CANVAS / EXPORT_H);
+function updateExportHint() {
+  const r = exportRatio(), m = 2 * Math.round(EXPORT_MARGIN * r);
+  $('expHint').textContent = `${Math.round(EXPORT_W * r) + m} × ${Math.round(EXPORT_H * r) + m} px`;
+}
+function whenIdle(m, timeout) {
+  return new Promise(resolve => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(); } };
+    m.once('idle', finish); setTimeout(finish, timeout); m.triggerRepaint();
+  });
+}
+// a nice round distance for a scale bar of at most maxPx CSS pixels near the bottom of map m
+function scaleBar(m, maxPx) {
+  const c = m.getContainer(), y = c.clientHeight - 40, x = c.clientWidth / 2;
+  const a = m.unproject([x - 50, y]), b = m.unproject([x + 50, y]);
+  const R = 6371008.8, rad = Math.PI / 180;
+  const d100 = R * Math.acos(Math.min(1, Math.sin(a.lat * rad) * Math.sin(b.lat * rad) + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.cos((b.lng - a.lng) * rad)));
+  const mPerPx = d100 / 100, maxM = mPerPx * maxPx;
+  const p = Math.pow(10, Math.floor(Math.log10(maxM))), d = maxM / p >= 5 ? 5 * p : maxM / p >= 2 ? 2 * p : p;
+  return { px: d / mPerPx, label: d >= 1000 ? `${d / 1000} km` : `${d} m` };
+}
+
+function decorateExport(ctx, m, W, H, sp, col) {
+  // plain white boxes with a thin black border, on any basemap
+  const C = { bg: '#ffffff', text: '#000000', muted: '#333333', line: '#000000' };
+  const box = (x, y, w, h) => {
+    ctx.fillStyle = C.bg; ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  };
+  ctx.textBaseline = 'alphabetic';
+
+  // title (top left): scientific name, common name, group and mobility
+  const d = DETAILS[sp.id] || {};
+  const lines = [
+    { text: sp.name, font: `italic 600 20px ${FONT}`, colour: C.text, h: 25 },
+    d.common ? { text: d.common, font: `14px ${FONT}`, colour: C.text, h: 19 } : null,
+    { text: `${groupLabel(sp.group)}, ${mobilityLabel(sp.mobility).toLowerCase()}`, font: `12px ${FONT}`, colour: C.muted, h: 18 }
+  ].filter(Boolean);
+  let tw = 0;
+  for (const l of lines) { ctx.font = l.font; tw = Math.max(tw, ctx.measureText(l.text).width); }
+  box(14, 14, Math.min(tw + 28, W - 28), lines.reduce((s, l) => s + l.h, 0) + 16);
+  let ty = 22;
+  for (const l of lines) { ty += l.h; ctx.font = l.font; ctx.fillStyle = l.colour; ctx.fillText(l.text, 28, ty - 5); }
+
+  // legend + scale bar (bottom right, over land)
+  const lw = Math.min(260, W - 28), lh = 96, lx = W - lw - 14, ly = H - lh - 14;
+  box(lx, ly, lw, lh);
+  ctx.font = `600 12.5px ${FONT}`; ctx.fillStyle = C.text;
+  ctx.fillText(`${col.label}${col.unit ? ` (${col.unit})` : ''}`, lx + 14, ly + 22, lw - 28);
+  paintColourBar(ctx, lx + 14, ly + 30, lw - 28, C.muted, C.line);
+  ctx.textBaseline = 'alphabetic';
+  const sb = scaleBar(m, 110), sy = ly + 80;
+  ctx.strokeStyle = C.text; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(lx + 14, sy - 5); ctx.lineTo(lx + 14, sy); ctx.lineTo(lx + 14 + sb.px, sy); ctx.lineTo(lx + 14 + sb.px, sy - 5); ctx.stroke();
+  ctx.font = `11px ${FONT}`; ctx.fillStyle = C.text; ctx.fillText(sb.label, lx + 22 + sb.px, sy + 1);
+}
+
+// render the current species into a hidden map of the export frame and return the finished canvas
+async function renderExport(sp, col) {
+  const ratio = exportRatio();
+  const holder = document.createElement('div');
+  holder.style.cssText = `position:fixed;left:-${EXPORT_W + 100}px;top:0;width:${EXPORT_W}px;height:${EXPORT_H}px;pointer-events:none`;
+  document.body.appendChild(holder);
+  // same colours and values as the visible layer, but its own GPU resources (separate WebGL context)
+  const lyr = new HexLayer(GRID);
+  lyr.t.set(layer.t); lyr.lut = layer.lut; Object.assign(lyr.u, layer.u, { hover: -1 });
+  const opts = {
+    container: holder, style: styleFor(state.basemap), pixelRatio: ratio, preserveDrawingBuffer: true,
+    interactive: false, attributionControl: false, fadeDuration: 0, renderWorldCopies: false
+  };
+  if (state.exportArea === 'view') {
+    // same centre; zoom so the frame shows about as much height as the screen does
+    opts.center = map.getCenter();
+    opts.zoom = map.getZoom() + Math.log2(EXPORT_H / map.getContainer().clientHeight);
+  } else {
+    opts.bounds = GRID_BOUNDS; opts.fitBoundsOptions = { padding: 16 };
+  }
+  const m = new maplibregl.Map(opts);
+  try {
+    await new Promise((resolve, reject) => {
+      m.once('style.load', () => {
+        const bm = BASEMAPS[state.basemap];
+        let before = bm.before;
+        if (!before) { const s = m.getStyle().layers.find(l => l.type === 'symbol'); before = s && s.id; }
+        m.addLayer(lyr, before && m.getLayer(before) ? before : undefined);
+        resolve();
+      });
+      m.once('error', e => { if (!m.isStyleLoaded()) reject(e && e.error || new Error('basemap failed to load')); });
+    });
+    await whenIdle(m, 15000);
+    m.redraw();
+    const src = m.getCanvas();
+    // white margin around the map, with a black border along the map's edge
+    const sx = src.width / EXPORT_W, sy = src.height / EXPORT_H, mx = Math.round(EXPORT_MARGIN * sx), my = Math.round(EXPORT_MARGIN * sy);
+    const out = document.createElement('canvas'); out.width = src.width + 2 * mx; out.height = src.height + 2 * my;
+    const ctx = out.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, out.width, out.height);
+    ctx.drawImage(src, mx, my);
+    ctx.setTransform(sx, 0, 0, sy, mx, my);
+    decorateExport(ctx, m, EXPORT_W, EXPORT_H, sp, col);
+    ctx.strokeStyle = '#000000'; ctx.lineWidth = 1.5; ctx.strokeRect(-0.75, -0.75, EXPORT_W + 1.5, EXPORT_H + 1.5);
+    return out;
+  } finally {
+    m.remove(); holder.remove();
+  }
+}
+
+let exporting = false;
+async function exportImage() {
+  if (!map || !current || exporting) return;
+  exporting = true;
+  const btn = $('exportBtn'), label = $('exportLabel');
+  btn.disabled = true; label.textContent = 'Preparing image…';
+  const sp = SP_BY_ID[current.id], col = COL_BY_ID[state.col];
+  try {
+    const out = await renderExport(sp, col);
+    const jpg = state.exportFormat === 'jpg';
+    const blob = await new Promise(res => out.toBlob(res, jpg ? 'image/jpeg' : 'image/png', 0.92));
+    if (!blob) throw new Error('the browser could not encode the image');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${sp.id.replace(/\./g, '_')}_${col.id}.${jpg ? 'jpg' : 'png'}`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+    window.CMAP.lastExport = { name: a.download, width: out.width, height: out.height, bytes: blob.size };
+    toast(`Saved ${a.download} (${out.width} × ${out.height} px)`, 3000);
+  } catch (err) {
+    console.error(err); toast(`Could not create the image: ${err.message || err}`);
+  }
+  btn.disabled = false; label.textContent = 'Save map image';
+  exporting = false;
+}
+
+function copyLink() {
+  const p = new URLSearchParams();
+  p.set('sp', state.species); p.set('v', state.col); p.set('cm', state.cmap);
+  if (state.reverse) p.set('rev', '1');
+  if (!BASEMAPS[state.basemap].hidden) p.set('bm', state.basemap);
+  const c = map.getCenter();
+  p.set('at', `${c.lat.toFixed(4)},${c.lng.toFixed(4)},${map.getZoom().toFixed(2)}`);
+  const url = location.href.split('#')[0] + '#' + p.toString();
+  const done = () => toast('Link to this view copied to the clipboard.', 2500);
+  const fallback = () => {
+    const ta = document.createElement('textarea'); ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch (e) { /* ignore */ }
+    ta.remove(); ok ? done() : window.prompt('Copy this link:', url);
+  };
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(url).then(done, fallback); else fallback();
+}
+
+/* =====================================================================
+   Hover tooltip & cell selection
+   ===================================================================== */
+const tip = $('tip');
+function setupPicking() {
+  let pending = null, raf = 0, dragging = false, lastPoint = null;
+  const process = () => {
+    raf = 0;
+    if (!pending) return;
+    const pt = pending; pending = null;
+    const ll = map.unproject([pt.x, pt.y]);
+    const h = GRID.pick(ll.lng, ll.lat);
+    if (h !== state.hoverCell) {
+      state.hoverCell = h; layer.u.hover = h; map.triggerRepaint();
+      updateTip(h);
+    }
+    if (h >= 0) placeTip(pt);
+  };
+  const queue = pt => { lastPoint = pt; pending = pt; if (!raf) raf = requestAnimationFrame(process); };
+  map.on('mousemove', e => { if (!dragging) queue(e.point); });
+  map.on('dragstart', () => { dragging = true; hideHover(); });
+  map.on('dragend', () => { dragging = false; });
+  map.on('zoom', () => { if (!dragging && lastPoint && state.hoverCell >= 0) queue(lastPoint); });
+  map.getCanvasContainer().addEventListener('mouseleave', () => { lastPoint = null; pending = null; hideHover(); });
+  map.on('click', e => {
+    const h = GRID.pick(e.lngLat.lng, e.lngLat.lat);
+    state.selCell = h === state.selCell ? -1 : h;
+    layer.u.sel = state.selCell; map.triggerRepaint();
+    renderCell();
+  });
+}
+function hideHover() {
+  if (state.hoverCell !== -1) { state.hoverCell = -1; layer.u.hover = -1; map.triggerRepaint(); }
+  tip.hidden = true;
+}
+function updateTip(h) {
+  if (h < 0 || !current) { tip.hidden = true; return; }
+  const col = COL_BY_ID[state.col], row = current.rowOf(h);
+  if (row < 0) {
+    tip.innerHTML = `<div class="s">No data for this species</div><div class="s">Cell ${GRID.hexId[h]}</div>`;
+  } else {
+    const v = current.values(col.k)[row];
+    tip.innerHTML = `<div class="v">${fmt(v, col.integer)}${col.unit ? ` <span class="s">${escapeHtml(col.unit)}</span>` : ''}</div><div class="s">${escapeHtml(col.label)} · cell ${GRID.hexId[h]}</div>`;
+  }
+  tip.hidden = false;
+  tipSize = null;
+}
+let tipSize = null;
+function placeTip(pt) {
+  if (tip.hidden) return;
+  const main = $('main');
+  if (!tipSize) tipSize = [tip.offsetWidth, tip.offsetHeight, main.clientWidth, main.clientHeight];
+  const [w, h, W, H] = tipSize;
+  let x = pt.x + 14, y = pt.y + 14;
+  if (x + w > W - 6) x = pt.x - w - 14;
+  if (y + h > H - 6) y = pt.y - h - 14;
+  tip.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+}
+
+function renderCell() {
+  const el = $('cell'), h = state.selCell;
+  if (h < 0 || !current) { el.hidden = true; return; }
+  const row = current.rowOf(h), sp = SP_BY_ID[current.id];
+  const closeBtn = '<button class="icon-btn" id="cellClose" aria-label="Clear selected cell" title="Clear selection (Esc)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>';
+  const ll = [GRID.centre[h * 2], GRID.centre[h * 2 + 1]];
+  let html = `<div class="ch"><b>Cell ${GRID.hexId[h]}</b><span>${ll[1].toFixed(3)}° N, ${ll[0].toFixed(3)}° E</span>${closeBtn}</div>`;
+  if (row < 0) {
+    html += `<div class="pct">No data for <i>${escapeHtml(sp.name)}</i> in this cell.</div>`;
+  } else {
+    const val = id => { const c = COL_BY_ID[id]; if (!c) return ''; const v = current.values(c.k)[row]; return `<td class="${id === state.col ? 'cur' : ''}">${fmt(v, c.integer)}</td>`; };
+    html += '<table><tr><th></th><th>Source</th><th>Sink</th></tr>';
+    for (const r of buildVarGrid.rows) {
+      const unit = COL_BY_ID[r.single || r.source || r.sink].unit;
+      html += `<tr><td>${escapeHtml(r.label)}${unit ? ` (${escapeHtml(unit)})` : ''}</td>${r.single ? `${val(r.single)}<td></td>` : val(r.source) + val(r.sink)}</tr>`;
+    }
+    html += '</table>';
+    const col = COL_BY_ID[state.col], s = current.stats(col.k), v = current.values(col.k)[row];
+    if (v === v && s.m > 1) {
+      // share of the species' cells with a strictly lower value
+      html += `<div class="pct">${escapeHtml(col.label)}: higher than ${Math.round(s.bound(v, false) / s.m * 100)} % of this species’ cells.</div>`;
+    }
+  }
+  const wasHidden = el.hidden;
+  el.innerHTML = html; el.hidden = false;
+  $('cellClose').onclick = clearCell;
+  if (wasHidden) el.scrollIntoView({ block: 'nearest' });   // inside the panel's scroll area
+}
+function clearCell() { state.selCell = -1; layer.u.sel = -1; map && map.triggerRepaint(); renderCell(); }
+
+/* =====================================================================
+   Keyboard
+   ===================================================================== */
+function setupKeyboard() {
+  const search = $('search');
+  document.addEventListener('keydown', e => {
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = e.target, tag = t.tagName;
+    const typing = (tag === 'INPUT' && !['checkbox', 'radio', 'button'].includes(t.type)) || tag === 'TEXTAREA' || t.isContentEditable;
+    const inSearch = t === search;
+    const popOpen = !$('cmPop').hidden;
+    if ($('help').open) return;
+
+    if (popOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape')) {
+      e.preventDefault();
+      if (e.key === 'Escape') { closePop(); $('cmBtn').focus(); return; }
+      const opts = [...$('cmPop').querySelectorAll('.cm-opt')];
+      let i = opts.indexOf(document.activeElement);
+      i = clamp(i + (e.key === 'ArrowDown' ? 1 : -1), 0, opts.length - 1);
+      opts[i].focus();
+      return;
+    }
+    switch (e.key) {
+      case 'ArrowDown': case 'ArrowUp':
+        if (typing && !inSearch) return;
+        e.preventDefault(); step(e.key === 'ArrowDown' ? 1 : -1, e.repeat); break;
+      case 'ArrowRight': case 'ArrowLeft':
+        if (typing) return;
+        e.preventDefault(); step(e.key === 'ArrowRight' ? 1 : -1, e.repeat); break;
+      case 'PageDown': case 'PageUp':
+        if (typing && !inSearch) return;
+        e.preventDefault(); step(e.key === 'PageDown' ? 10 : -10, e.repeat); break;
+      case 'Home': case 'End':
+        if (typing) return;
+        e.preventDefault(); step(e.key === 'End' ? Infinity : -Infinity); break;
+      case 'Enter':
+        if (inSearch) { e.preventDefault(); if (state.visible.length && !state.visible.includes(state.species)) selectSpecies(state.visible[0]); search.blur(); }
+        break;
+      case 'Escape':
+        if (inSearch) { if (search.value) { search.value = ''; state.query = ''; applyFilters(); } else search.blur(); }
+        else if (typing) t.blur();
+        else if (state.selCell >= 0) clearCell();
+        else if ($('app').classList.contains('side-open')) $('app').classList.remove('side-open');
+        break;
+      case '/':
+        if (typing) return;
+        e.preventDefault();
+        if (window.innerWidth <= 860) $('app').classList.add('side-open');
+        search.focus(); search.select(); break;
+      default:
+        if (typing) return;
+        if (e.key === 's' || e.key === 'S') toggleSourceSink();
+        else if (e.key === 'r' || e.key === 'R') { state.reverse = !state.reverse; setColourMap(state.cmap); }        else if (e.key === '?') $('help').showModal();
+        else if (/^[1-9]$/.test(e.key)) selectRow(+e.key - 1);
+    }
+  });
+}
+
+/* =====================================================================
+   Boot
+   ===================================================================== */
+try {
+  $('subtitle').textContent = `${SPECIES.length} species · 3 km hex grid`;
+  buildList();
+  buildFilters();
+  buildVarGrid();
+  buildColourPicker();
+  buildDisplayControls();
+  setColourMap(state.cmap);
+  for (const [c, b] of Object.entries(varButtons)) b.setAttribute('aria-pressed', c === state.col);
+  const col = COL_BY_ID[state.col];
+  $('vardesc').innerHTML = `${escapeHtml(col.desc || col.label)} <code>${escapeHtml(col.id)}</code>`;
+  setupKeyboard();
+  // first species alphabetically, unless a shared link names one
+  const initial = state.species;
+  state.species = null;
+  applyFilters({ select: false });
+  selectSpecies(initial || state.visible[0]);
+  initMap();                                        // after the species card is filled (initial padding)
+  window.addEventListener('resize', () => { tipSize = null; if (lastLegend) drawLegend(...lastLegend); });
+  // keep data structures inspectable from the console for debugging
+  window.CMAP.app = { map, layer, state, GRID, cache, recompute };
+} catch (err) {
+  console.error(err);
+  fatal(`<b>Something went wrong while starting the app.</b><br><br><code>${escapeHtml(err.message || err)}</code>`);
+}
+})();
+</script>
+</body>
+</html>

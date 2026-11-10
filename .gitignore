@@ -1,0 +1,13 @@
+# Only the app itself (docs/) goes into the repository; everything else stays local.
+# Ignore everything at the top level...
+/*
+
+# ...except the app and this file
+!/docs/
+!/.gitignore
+
+# Local clutter that could end up inside docs/
+.Rhistory
+.DS_Store
+Thumbs.db
+desktop.ini
