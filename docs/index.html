@@ -1686,23 +1686,31 @@ function decorateExport(ctx, m, W, H, sp, col) {
   };
   ctx.textBaseline = 'alphabetic';
 
-  // title (top left): scientific name, common name, group and mobility
+  // one box (top left, over Scandinavia): scientific name and common name, then legend and scale bar
   const d = DETAILS[sp.id] || {};
+  const nameFont = `italic 600 20px ${FONT}`, comFont = `14px ${FONT}`, maxTextW = 380;
+  ctx.font = nameFont;
+  // species pairs ("A b/C d") go on two lines when they are too wide
+  const nameLines = ctx.measureText(sp.name).width > maxTextW && sp.name.includes('/')
+    ? sp.name.split('/').map((s, i, a) => i < a.length - 1 ? s + '/' : s) : [sp.name];
   const lines = [
-    { text: sp.name, font: `italic 600 20px ${FONT}`, colour: C.text, h: 25 },
-    d.common ? { text: d.common, font: `14px ${FONT}`, colour: C.text, h: 19 } : null,
-    { text: `${groupLabel(sp.group)}, ${mobilityLabel(sp.mobility).toLowerCase()}`, font: `12px ${FONT}`, colour: C.muted, h: 18 }
+    ...nameLines.map(text => ({ text, font: nameFont, h: 25 })),
+    d.common ? { text: d.common, font: comFont, h: 19 } : null
   ].filter(Boolean);
   let tw = 0;
   for (const l of lines) { ctx.font = l.font; tw = Math.max(tw, ctx.measureText(l.text).width); }
-  box(14, 14, Math.min(tw + 28, W - 28), lines.reduce((s, l) => s + l.h, 0) + 16);
-  let ty = 22;
-  for (const l of lines) { ty += l.h; ctx.font = l.font; ctx.fillStyle = l.colour; ctx.fillText(l.text, 28, ty - 5); }
+  const titleH = lines.reduce((s, l) => s + l.h, 0);
+  const lw = Math.min(Math.max(260, Math.min(tw, maxTextW) + 28), W - 28), lh = 96;
+  const bx = 14, by = 14, bh = 8 + titleH + 8 + lh - 4;
+  box(bx, by, lw, bh);
+  let ty = by + 8;
+  for (const l of lines) { ty += l.h; ctx.font = l.font; ctx.fillStyle = C.text; ctx.fillText(l.text, bx + 14, ty - 5, lw - 28); }
 
-  // legend + scale bar (bottom right, over land)
-  const lw = Math.min(260, W - 28), lh = 96, lx = W - lw - 14, ly = H - lh - 14;
-  box(lx, ly, lw, lh);
-  ctx.font = `600 12.5px ${FONT}`; ctx.fillStyle = C.text;
+  // legend + scale bar, below the names
+  const lx = bx, ly = ty + 4;
+  ctx.strokeStyle = '#b0b0b0'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(lx + 14, ly + 4.5); ctx.lineTo(lx + lw - 14, ly + 4.5); ctx.stroke();
+  ctx.font = `600 14px ${FONT}`; ctx.fillStyle = C.text;
   ctx.fillText(`${col.label}${col.unit ? ` (${col.unit})` : ''}`, lx + 14, ly + 22, lw - 28);
   paintColourBar(ctx, lx + 14, ly + 30, lw - 28, C.muted, C.line);
   ctx.textBaseline = 'alphabetic';
