@@ -411,6 +411,7 @@ window.CMAP = {
         <div class="sect">
           <div class="flabel">Export image</div>
           <div class="seg" id="expAreaSeg"></div>
+          <div class="seg" id="expLegSeg"></div>
           <div class="seg" id="expFmtSeg"></div>
           <div class="seg" id="expSizeSeg"></div>
           <button class="btn primary" id="exportBtn" style="margin-top:8px;width:100%;justify-content:center"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span id="exportLabel">Save map image</span></button>
@@ -1048,7 +1049,7 @@ const state = {
   col: 'source_strength_tukey',
   cmap: 'RdYlBu', reverse: false,   // colours always run linearly from the species' min to max
   basemap: 'light',
-  exportArea: 'baltic', exportFormat: 'png', exportScale: 2,
+  exportArea: 'baltic', exportLegend: 'on', exportFormat: 'png', exportScale: 2,
   theme: null,              // null = follow system
   // filters
   groups: new Set(), mobility: 'all', archetypes: new Set(), query: '',
@@ -1611,7 +1612,8 @@ function setColourMap(name) {
 function buildDisplayControls() {
   makeSeg('baseSeg', Object.entries(BASEMAPS).filter(([, b]) => !b.hidden).map(([k, b]) => [k, b.label]), state.basemap, v => setBasemap(v));
   makeSeg('expAreaSeg', [['baltic', 'Whole Baltic'], ['view', 'Current view', 'Centred on what the map shows now']], state.exportArea, v => { state.exportArea = v; });
-  makeSeg('expFmtSeg', [['png', 'PNG', 'Lossless – best for figures'], ['jpg', 'JPG', 'Smaller file']], state.exportFormat, v => { state.exportFormat = v; });
+  makeSeg('expLegSeg', [['on', 'With legend', 'Species name, legend and scale bar in the top-left corner'], ['off', 'Map only', 'No name, legend or scale bar']], state.exportLegend, v => { state.exportLegend = v; });
+  makeSeg('expFmtSeg',[['png', 'PNG', 'Lossless – best for figures'], ['jpg', 'JPG', 'Smaller file']], state.exportFormat, v => { state.exportFormat = v; });
   makeSeg('expSizeSeg', [['1', '1×'], ['2', '2×'], ['3', '3× (print)']], state.exportScale, v => { state.exportScale = +v; updateExportHint(); });
   updateExportHint();
   $('exportBtn').onclick = exportImage;
@@ -1762,7 +1764,7 @@ async function renderExport(sp, col) {
     ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, out.width, out.height);
     ctx.drawImage(src, mx, my);
     ctx.setTransform(sx, 0, 0, sy, mx, my);
-    decorateExport(ctx, m, EXPORT_W, EXPORT_H, sp, col);
+    if (state.exportLegend !== 'off') decorateExport(ctx, m, EXPORT_W, EXPORT_H, sp, col);
     ctx.strokeStyle = '#000000'; ctx.lineWidth = 1.5; ctx.strokeRect(-0.75, -0.75, EXPORT_W + 1.5, EXPORT_H + 1.5);
     return out;
   } finally {
@@ -1784,7 +1786,7 @@ async function exportImage() {
     if (!blob) throw new Error('the browser could not encode the image');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `${sp.id.replace(/\./g, '_')}_${col.id}.${jpg ? 'jpg' : 'png'}`;
+    a.download = `${sp.id.replace(/\./g, '_')}_${col.id}${state.exportLegend === 'off' ? '_map' : ''}.${jpg ? 'jpg' : 'png'}`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 30000);
     window.CMAP.lastExport = { name: a.download, width: out.width, height: out.height, bytes: blob.size };
